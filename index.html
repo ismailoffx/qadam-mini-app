@@ -190,6 +190,11 @@
             let lastTimestamp = null;
             let inactivityTimer = null;
             
+            let stepCount = 0;
+            let lastMagnitude = 0;
+            let lastStepTime = 0;
+            let motionMode = false; // true = akselerometr, false = GPS
+            
             // ASOSIY OLDINGI LOGIKA CONSTANTAlari
             const INACTIVITY_LIMIT_MS = 10 * 60 * 1000;
             const SPEED_LIMIT_MPS = 4.0; // (14km/h gacha)
@@ -374,6 +379,22 @@
                 updateStats();
             }
 
+            function handleMotion(event) {
+                if (!isTracking) return;
+                const acc = event.accelerationIncludingGravity;
+                if (!acc || acc.x === null) return;
+                const magnitude = Math.sqrt(acc.x**2 + acc.y**2 + acc.z**2);
+                const delta = Math.abs(magnitude - lastMagnitude);
+                lastMagnitude = magnitude;
+                const now = Date.now();
+                if (delta > 12 && (now - lastStepTime) > 300) {
+                    stepCount++;
+                    lastStepTime = now;
+                    updateStats();
+                    resetInactivityTimer();
+                }
+            }
+
             // ESKI QADAM METODIGA O'TISH - GPS ORQALI! TO'XTATISH TUGMASI HIMOYA OSTIDA!
             function stopTracking(dueToInactivity = false) {
                 try {
@@ -384,13 +405,18 @@
                     
                     if (inactivityTimer) clearTimeout(inactivityTimer);
 
+                    window.removeEventListener('devicemotion', handleMotion);
+                    motionMode = false;
+
                     if (watchId !== null) {
                         navigator.geolocation.clearWatch(watchId);
                         watchId = null;
                     }
                     
-                    let finalSteps = Math.floor(totalDistance / STEP_LENGTH_METERS);
+                    let finalSteps = motionMode ? stepCount : Math.floor(totalDistance / STEP_LENGTH_METERS);
                     saveStatsToSupabase(finalSteps, totalDistance);
+                    
+                    stepCount = 0;
 
                     if (dueToInactivity) {
                         try { tg.showAlert("10 daqiqa harakatsiz bo'lganligi sababli o'yin avtomatik to'xtatildi."); } catch(e){}
@@ -429,17 +455,40 @@
 
             stopBtn.addEventListener('click', () => stopTracking(false));
 
-            startBtn.addEventListener('click', () => {
+            startBtn.addEventListener('click', async () => {
                 if (!("geolocation" in navigator)) {
                     tg.showAlert("Qurilmangizda GPS yo'q.");
                     return;
                 }
                 
+                if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+                    try {
+                        const permission = await DeviceMotionEvent.requestPermission();
+                        if (permission === 'granted') {
+                            window.addEventListener('devicemotion', handleMotion);
+                            motionMode = true;
+                            showStatus("📱 Sensor orqali ishlamoqda", 3000);
+                        } else {
+                            motionMode = false;
+                            showStatus("🛰 GPS orqali ishlamoqda", 3000);
+                        }
+                    } catch(e) {
+                        motionMode = false;
+                    }
+                } else if (typeof DeviceMotionEvent !== 'undefined') {
+                    window.addEventListener('devicemotion', handleMotion);
+                    motionMode = true;
+                    showStatus("📱 Sensor orqali ishlamoqda", 3000);
+                } else {
+                    motionMode = false;
+                    showStatus("🛰 GPS orqali ishlamoqda", 3000);
+                }
+
                 isTracking = true;
                 startBtn.style.display = 'none';
                 stopBtn.style.display = 'flex';
                 
-                showStatus("GPS Qadam hisoblamoqda...");
+                if(!motionMode) showStatus("GPS Qadam hisoblamoqda...");
 
                 if (polyline) map.removeLayer(polyline);
                 pathLatLngs = []; 
@@ -528,16 +577,13 @@
             });
 
             function updateStats() {
-                // To'liq avvalgi usul! qadam masofaga teng!
-                let steps = Math.floor(totalDistance / STEP_LENGTH_METERS);
-                if(stepCountEl.textContent != steps) {
+                let steps = motionMode ? stepCount : Math.floor(totalDistance / STEP_LENGTH_METERS);
+                if (stepCountEl.textContent != steps) {
                     stepCountEl.style.transform = 'scale(1.1)';
                     setTimeout(() => stepCountEl.style.transform = 'scale(1)', 150);
                 }
                 stepCountEl.textContent = steps;
-                
                 distanceEl.textContent = totalDistance < 1000 ? totalDistance.toFixed(1) + ' m' : (totalDistance / 1000).toFixed(2) + ' km';
-                
                 let displayArea = totalArea > 10000 ? (totalArea / 10000).toFixed(2) + ' ga' : totalArea.toFixed(1) + ' m²';
                 areaEl.textContent = displayArea;
             }
