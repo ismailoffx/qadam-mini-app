@@ -6,6 +6,8 @@
     <title>Qadam - Telegram Mini App</title>
     
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Supabase JS CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 
@@ -128,7 +130,7 @@
     </div>
 
     <div id="map"></div>
-    <div class="status-pill" id="statusPill">GPS kutilyapti...</div>
+    <div class="status-pill" id="statusPill">Kirish...</div>
 
     <div class="controls">
         <button class="btn btn-start" id="startBtn">
@@ -143,9 +145,17 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
     <script>
+        // Supabase Initialization
+        const SUPABASE_URL = 'https://qxncsdivkowkgydtjokr.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF4bmNzZGl2a293a2d5ZHRqb2tyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MTAwOTYsImV4cCI6MjA5MDQ4NjA5Nn0.NtAgZcAlQgvsMSMe325n0AW8-Cmz31KD-OGJUFmvhGo';
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
         const tg = window.Telegram.WebApp;
         tg.expand();
         tg.ready();
+
+        // Telegram User Data (Fallbacks for testing outside Telegram)
+        const tgUser = tg.initDataUnsafe?.user || { id: 111111, first_name: "Mehmon", username: "mehmon" };
 
         if (tg.colorScheme === 'dark') document.body.setAttribute('data-theme', 'dark');
 
@@ -192,7 +202,102 @@
             setTimeout(() => { if(!isTracking || statusPill.textContent !== msg) statusPill.classList.remove('visible'); }, timeout);
         }
 
-        // Spherical polygon area calculation (approx)
+        // ============================
+        // SUPABASE BACKEND FUNCTIONS
+        // ============================
+        
+        async function initGameSystem() {
+            // 1. Foydalanuvchi tizimi uspert
+            const { error: userError } = await supabase
+                .from('users')
+                .upsert({ 
+                    telegram_id: tgUser.id, 
+                    first_name: tgUser.first_name || '', 
+                    username: tgUser.username || '' 
+                }, { onConflict: 'telegram_id' });
+
+            if (userError) console.error("User saqlashda xatolik:", userError);
+
+            // 2. Boshqa o'yinchilar va o'zining hududlarini yuklash
+            loadAllTerritories();
+
+            // 3. Real-time hududlar yaratilishini tinglash
+            supabase
+                .channel('public:territories')
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'territories' }, payload => {
+                    const newTerritory = payload.new;
+                    // Boshqa o'yinchilarning yangi poligoni xaritada darhol chizilsin
+                    if (newTerritory.user_id !== tgUser.id) {
+                        drawTerritoryPolygon(newTerritory.polygon_coords, newTerritory.user_id);
+                    }
+                })
+                .subscribe();
+                
+            showStatus("Tizimga ulandi!", 2000);
+        }
+
+        async function loadAllTerritories() {
+            const { data, error } = await supabase.from('territories').select('*');
+            if (data) {
+                // Avvalgi chizilganlarni hisobga olish
+                let myArea = 0;
+                data.forEach(territory => {
+                    drawTerritoryPolygon(territory.polygon_coords, territory.user_id);
+                    if (territory.user_id === tgUser.id) {
+                        myArea += (territory.area_sqm || 0);
+                    }
+                });
+                totalArea = myArea;
+                updateStats();
+            }
+        }
+
+        function drawTerritoryPolygon(coords, ownerId) {
+            if (!coords || coords.length === 0) return;
+            // {lat, lng} obyektini Leaflet [lat, lng] massiviga o'tkazish
+            const latLngs = coords.map(c => [c.lat, c.lng]);
+            const isMine = ownerId === tgUser.id;
+            
+            // Mening polygongim ko'k, boshqalarniki kulrang
+            const color = isMine ? 'var(--btn-color, #2481cc)' : '#808080';
+
+            const poly = L.polygon(latLngs, {
+                color: color,
+                fillColor: color,
+                fillOpacity: isMine ? 0.4 : 0.3,
+                weight: 2
+            }).addTo(map);
+            polygons.push(poly);
+        }
+
+        async function saveStatsToSupabase(steps, dist) {
+            if (steps === 0) return;
+            const { error } = await supabase.from('steps_stats').insert({
+                user_id: tgUser.id,
+                steps: steps,
+                distance_meters: dist,
+                date: new Date().toISOString()
+            });
+            if (error) console.error("Stats xatolik:", error);
+        }
+
+        async function saveTerritoryToSupabase(coords, area) {
+            const { error } = await supabase.from('territories').insert({
+                user_id: tgUser.id,
+                polygon_coords: coords,
+                area_sqm: area
+            });
+            if (error) console.error("Territory xatolik:", error);
+        }
+
+        // Initialize user login on load
+        initGameSystem();
+
+
+        // ============================
+        // O'YIN VA GAMEPLAY LIGOKASI
+        // ============================
+
         function getGeodesicArea(latLngs) {
             let area = 0;
             const d2r = Math.PI / 180;
@@ -211,7 +316,7 @@
             if (inactivityTimer) clearTimeout(inactivityTimer);
             inactivityTimer = setTimeout(() => {
                 if (isTracking) {
-                    stopTracking(true); // Pass flag for inactivity
+                    stopTracking(true); 
                 }
             }, INACTIVITY_LIMIT_MS);
         }
@@ -220,24 +325,23 @@
             const area = getGeodesicArea(pathLatLngs);
             totalArea += area;
             
-            // Draw polygon
-            const newPolygon = L.polygon(pathLatLngs, {
-                color: 'var(--btn-color, #2481cc)',
-                fillColor: 'var(--btn-color, #2481cc)',
-                fillOpacity: 0.4,
-                weight: 2
-            }).addTo(map);
-            polygons.push(newPolygon);
+            // Convert Leaflet latLng Objects to standard JSON array for Supabase
+            const jsonCoords = pathLatLngs.map(p => ({ lat: p.lat, lng: p.lng }));
+            
+            // Xaritada lokallar darxol chiziladi
+            drawTerritoryPolygon(jsonCoords, tgUser.id);
+            
+            // Supabase'ga yuborish
+            saveTerritoryToSupabase(jsonCoords, area);
 
-            // Notify User
             if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
             tg.showPopup({
                 title: "Hudud egallandi!",
-                message: `Siz ${area.toFixed(1)} kv.m maydonni yopdingiz!`,
+                message: `Siz ${area.toFixed(1)} kv.m maydonni hududingizga qo'shib oldingiz!`,
                 buttons: [{type: "close"}]
             });
 
-            // Reset path for new area
+            // Yangi yurish uchun tozalash
             if (polyline) map.removeLayer(polyline);
             pathLatLngs = [];
             polyline = L.polyline([], { color: 'var(--btn-color, #2481cc)', weight: 6, opacity: 0.8, lineJoin: 'round', lineCap: 'round'}).addTo(map);
@@ -256,16 +360,20 @@
                 watchId = null;
             }
             
+            let finalSteps = Math.floor(totalDistance / STEP_LENGTH_METERS);
+            
+            // Statistikaga yozib yuborish
+            saveStatsToSupabase(finalSteps, totalDistance);
+
             if (dueToInactivity) {
                 tg.showAlert("10 daqiqa harakatsiz bo'lganligi sababli o'yin avtomatik to'xtatildi.");
                 if (polyline) map.removeLayer(polyline);
                 pathLatLngs = [];
             } else {
-                let finalSteps = Math.floor(totalDistance / STEP_LENGTH_METERS);
                 if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
                 tg.showPopup({
-                    title: "O'yin to'xtatildi",
-                    message: `Siz ${finalSteps} qadam yurdingiz.\nBosib o'tilgan: ${totalDistance < 1000 ? totalDistance.toFixed(1) + ' m' : (totalDistance / 1000).toFixed(2) + ' km'}\nEgallangan maydon: ${totalArea.toFixed(1)} m²`,
+                    title: "O'yin saqlandi va to'xtatildi",
+                    message: `Siz ${finalSteps} qadam yurdingiz.\nBosib o'tilgan: ${totalDistance < 1000 ? totalDistance.toFixed(1) + ' m' : (totalDistance / 1000).toFixed(2) + ' km'}\nUmumiy maydoningiz: ${totalArea.toFixed(1)} m²`,
                     buttons: [{type: "close"}]
                 });
             }
@@ -289,11 +397,9 @@
             stopBtn.style.display = 'flex';
             showStatus("GPS signali qidirilmoqda...", 5000);
 
-            // Clean previous current track (don't clear polygons)
             if (polyline) map.removeLayer(polyline);
             pathLatLngs = []; 
             totalDistance = 0; 
-            // totalArea = 0; // Uncomment if we should reset area each time
             lastTimestamp = null;
             updateStats();
             resetInactivityTimer();
@@ -308,7 +414,7 @@
                 const accuracy = position.coords.accuracy;
                 const timestamp = position.timestamp;
                 
-                resetInactivityTimer(); // We got an update, user is active
+                resetInactivityTimer(); 
 
                 if (accuracy > 40) return; 
                 statusPill.classList.remove('visible'); 
@@ -319,15 +425,14 @@
                     const lastPoint = pathLatLngs[pathLatLngs.length - 1];
                     const dist = lastPoint.distanceTo(newPoint);
                     
-                    // Speed Check (Anti-cheat)
                     if (lastTimestamp) {
                         const timeDiffSec = (timestamp - lastTimestamp) / 1000;
                         if (timeDiffSec > 0) {
                             const speed = dist / timeDiffSec;
                             if (speed > SPEED_LIMIT_MPS) {
                                 showStatus("Juda tez!", 2000);
-                                lastTimestamp = timestamp; // Update timestamp regardless to avoid compounding time
-                                return; // Ignore point
+                                lastTimestamp = timestamp; 
+                                return; 
                             }
                         }
                     }
@@ -338,8 +443,6 @@
                         polyline.addLatLng(newPoint);
                         lastTimestamp = timestamp;
                         
-                        // Polygon Closure Check Check
-                        // Avval 15 metrdan uzoqqa chiqib ketganini ham hisobga olish kerak (ya'ni darhol yopilmasligi uchun, kamida 5-6 ta nuqta yig'ilsin)
                         if (pathLatLngs.length > 10) {
                             const distanceToStart = newPoint.distanceTo(pathLatLngs[0]);
                             if (distanceToStart <= POLYGON_CLOSE_DIST) {
