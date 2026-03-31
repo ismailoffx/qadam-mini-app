@@ -5,16 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Qadam - Telegram Mini App</title>
     
-    <!-- Avval kutubxonalar yuklanishi shart! -->
-    <!-- Telegram API -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <!-- Leaflet JS & CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-    <!-- Supabase JS CDN (Yangi versiya, eng ishonchli manbadan) -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4/dist/umd/supabase.min.js"></script>
-    
-    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 
     <style>
@@ -151,7 +145,6 @@
 
     <!-- MAIN SCRIPT -->
     <script>
-        // DOM to'liq o'qilmaguncha kodni kutish xatoliklarni 100% oldini oladi
         document.addEventListener('DOMContentLoaded', () => {
 
             const tg = window.Telegram?.WebApp || {
@@ -169,7 +162,6 @@
             const tgUser = tg.initDataUnsafe?.user || { id: 111111, first_name: "Mehmon", username: "mehmon" };
             if (tg.colorScheme === 'dark') document.body.setAttribute('data-theme', 'dark');
 
-            // 1. UI va Map Initsializatsiyasi (Supabase dan qat'iy nazar ishlashi kerak qism)
             const map = L.map('map', {zoomControl: false, attributionControl: false}).setView([41.311081, 69.240562], 13);
             L.control.attribution({position: 'bottomright'}).addTo(map);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '© OSMap'}).addTo(map);
@@ -181,7 +173,6 @@
             const areaEl = document.getElementById('areaDisplay');
             const statusPill = document.getElementById('statusPill');
 
-            // State variables
             let isTracking = false;
             let watchId = null;
             let pathLatLngs = [];
@@ -199,6 +190,12 @@
             const STEP_LENGTH_METERS = 0.7;
             const MIN_DISTANCE_ACCURACY = 2;
 
+            // QADAM HISOBLASH (SENSOR VA ZAXIRA)
+            let useSensor = false;
+            let sensorSteps = 0;
+            let lastMagnitude = 0;
+            let lastStepTime = 0;
+
             const userIcon = L.divIcon({
                 className: 'custom-user-marker',
                 html: '<div style="width: 18px; height: 18px; background-color: var(--btn-color); border: 3px solid white; border-radius: 50%; box-shadow: 0 0 10px rgba(0,0,0,0.4);"></div>',
@@ -208,10 +205,19 @@
             function showStatus(msg, timeout = 3000) {
                 statusPill.textContent = msg;
                 statusPill.classList.add('visible');
-                setTimeout(() => { if(!isTracking || statusPill.textContent !== msg) statusPill.classList.remove('visible'); }, timeout);
+                
+                let captureMsg = msg;
+                setTimeout(() => { 
+                    if (!isTracking) {
+                        statusPill.classList.remove('visible'); 
+                    } else if (statusPill.textContent === captureMsg) {
+                        // Agar tracking vaqtida o'tkinchi xabar o'chsa, orqa fonga tegishli indikatorni ko'rsatamiz
+                        statusPill.textContent = useSensor ? '📱 Sensor orqali ishlamoqda' : '🛰 GPS orqali ishlamoqda';
+                    }
+                }, timeout);
             }
 
-            // 2. SUPABASE INICIALIZATSIYASI VA XATOLARDAN HIMOYA (TRY/CATCH)
+            // SUPABASE HIMOYA ULANISHI
             let supabase = null;
             try {
                 if (window.supabase) {
@@ -227,9 +233,8 @@
                 supabase = null;
             }
 
-            // 3. ASYNC BAZA FUNKSIYALARI (Barchasida try/catch bo'lishi shart)
             async function initGameSystem() {
-                if (!supabase) return; // DB yo'q bo'lsa darxol chiqib ketish (o'yin normal ishlab qolishi uchun)
+                if (!supabase) return; 
                 try {
                     const { error: userError } = await supabase
                         .from('users')
@@ -259,7 +264,7 @@
                         
                     showStatus("Tizimga ulandi!", 2000);
                 } catch (e) {
-                    console.error("initGameSystem xatosi. O'yin bazasiz davom etadi:", e);
+                    console.error("initGameSystem xatosi.", e);
                 }
             }
 
@@ -267,10 +272,6 @@
                 if (!supabase) return;
                 try {
                     const { data, error } = await supabase.from('territories').select('*');
-                    if (error) {
-                        console.error("Hududlarni bazadan yuklashda xato:", error);
-                        return;
-                    }
                     if (data) {
                         let myArea = 0;
                         data.forEach(territory => {
@@ -296,7 +297,6 @@
                         distance_meters: dist,
                         date: new Date().toISOString()
                     });
-                    if (error) console.error("Statistika jo'natish xatosi:", error);
                 } catch (e) {
                     console.error("saveStatsToSupabase xato tasnifi:", e);
                 }
@@ -310,7 +310,6 @@
                         polygon_coords: coords,
                         area_sqm: area
                     });
-                    if (error) console.error("Maydon bazaga jo'natilmadi:", error);
                 } catch (e) {
                     console.error("saveTerritory xato tasnifi:", e);
                 }
@@ -335,11 +334,8 @@
                 }
             }
 
-            // O'yin yuklanganda initsializatsiya
             initGameSystem();
 
-
-            // 4. LOKAL GPS VA UI LOGIKA (Doim Ishlaydi)
             function getGeodesicArea(latLngs) {
                 let area = 0;
                 const d2r = Math.PI / 180;
@@ -369,9 +365,7 @@
                 
                 const jsonCoords = pathLatLngs.map(p => ({ lat: p.lat, lng: p.lng }));
                 
-                // Lokal chizish (offline dagi kabi)
                 drawTerritoryPolygon(jsonCoords, tgUser.id);
-                // Bazaga jo'natish (try/catch qilingan)
                 saveTerritoryToSupabase(jsonCoords, area);
 
                 if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
@@ -387,6 +381,51 @@
                 updateStats();
             }
 
+            // SENSOR QADAMLARI LOGIKASI
+            function handleMotion(event) {
+                if (!isTracking) return;
+                const accel = event.accelerationIncludingGravity;
+                if (!accel) return;
+                
+                let x = accel.x || 0;
+                let y = accel.y || 0;
+                let z = accel.z || 0;
+                
+                let magnitude = Math.sqrt(x*x + y*y + z*z);
+                let delta = Math.abs(magnitude - lastMagnitude);
+                
+                let now = Date.now();
+                
+                if (delta > 12 && (now - lastStepTime > 300)) {
+                    sensorSteps++;
+                    lastStepTime = now;
+                    updateStats();
+                }
+                lastMagnitude = magnitude;
+            }
+
+            async function requestDeviceMotion() {
+                if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+                    try {
+                        const permissionState = await DeviceMotionEvent.requestPermission();
+                        if (permissionState === 'granted') {
+                            useSensor = true;
+                            window.addEventListener('devicemotion', handleMotion);
+                        } else {
+                            useSensor = false;
+                        }
+                    } catch (e) {
+                        console.error('Sensor ruxsati olinmadi:', e);
+                        useSensor = false;
+                    }
+                } else if ('DeviceMotionEvent' in window) {
+                    useSensor = true;
+                    window.addEventListener('devicemotion', handleMotion);
+                } else {
+                    useSensor = false;
+                }
+            }
+
             function stopTracking(dueToInactivity = false) {
                 isTracking = false;
                 startBtn.style.display = 'flex';
@@ -394,12 +433,17 @@
                 statusPill.classList.remove('visible');
                 if (inactivityTimer) clearTimeout(inactivityTimer);
                 
+                if (useSensor) {
+                    window.removeEventListener('devicemotion', handleMotion);
+                }
+
                 if (watchId !== null) {
                     navigator.geolocation.clearWatch(watchId);
                     watchId = null;
                 }
                 
-                let finalSteps = Math.floor(totalDistance / STEP_LENGTH_METERS);
+                // Sensor bosa sensor, yo'qsa eskichasi
+                let finalSteps = useSensor ? sensorSteps : Math.floor(totalDistance / STEP_LENGTH_METERS);
                 saveStatsToSupabase(finalSteps, totalDistance);
 
                 if (dueToInactivity) {
@@ -410,7 +454,7 @@
                     if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
                     tg.showPopup({
                         title: "O'yin to'xtatildi",
-                        message: `Siz ${finalSteps} qadam yurdingiz.\nBosib o'tilgan: ${totalDistance < 1000 ? totalDistance.toFixed(1) + ' m' : (totalDistance / 1000).toFixed(2) + ' km'}\nUmumiy maydoningiz: ${totalArea.toFixed(1)} m²`,
+                        message: `Siz ${finalSteps} qadam yurdingiz.\nBosib o'tilgan masofa: ${totalDistance < 1000 ? totalDistance.toFixed(1) + ' m' : (totalDistance / 1000).toFixed(2) + ' km'}\nUmumiy maydoningiz: ${totalArea.toFixed(1)} m²`,
                         buttons: [{type: "close"}]
                     });
                 }
@@ -425,16 +469,24 @@
                 }
             } catch (ignoreErr) {}
 
-            startBtn.addEventListener('click', () => {
+            startBtn.addEventListener('click', async () => {
                 if (!("geolocation" in navigator)) {
                     tg.showAlert("Qurilmangizda GPS yo'q.");
                     return;
                 }
+                
+                // 1. IOS permission olish (Kutish)
+                await requestDeviceMotion();
 
                 isTracking = true;
                 startBtn.style.display = 'none';
                 stopBtn.style.display = 'flex';
-                showStatus("GPS signali qidirilmoqda...", 5000);
+                
+                sensorSteps = 0;
+                lastMagnitude = 0;
+                lastStepTime = Date.now();
+                
+                showStatus("Qadam hisobi boshlandi!");
 
                 if (polyline) map.removeLayer(polyline);
                 pathLatLngs = []; 
@@ -456,7 +508,6 @@
                     resetInactivityTimer(); 
 
                     if (accuracy > 40) return; 
-                    statusPill.classList.remove('visible'); 
                     
                     const newPoint = L.latLng(lat, lng);
                     
@@ -502,7 +553,12 @@
                         currentPositionMarker.setLatLng([lat, lng]);
                     }
                     map.panTo([lat, lng]);
-                    updateStats();
+                    
+                    // Agar sensor ishlayotgan bo'lsa, xarita o'zgargani bilan qadamni GPS dan OLMANG
+                    // Agar sensor ishlAMAYOTGAN bo'lsa, qadamni yangilang:
+                    if (!useSensor) {
+                        updateStats();
+                    }
                     
                 }, (error) => {
                     showStatus("GPS signalida xatolik");
@@ -510,10 +566,9 @@
                 }, { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 });
             });
 
-            stopBtn.addEventListener('click', () => stopTracking(false));
-
             function updateStats() {
-                let steps = Math.floor(totalDistance / STEP_LENGTH_METERS);
+                // Asosiy: Agar Sensor bo'lsa sensordan, bo'lmasa masofadan qadam chiqariladi
+                let steps = useSensor ? sensorSteps : Math.floor(totalDistance / STEP_LENGTH_METERS);
                 if(stepCountEl.textContent != steps) {
                     stepCountEl.style.transform = 'scale(1.1)';
                     setTimeout(() => stepCountEl.style.transform = 'scale(1)', 150);
