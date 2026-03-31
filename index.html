@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Qadam - Telegram Mini App</title>
+    
+    <!-- Telegram Web App Script -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-color: var(--tg-theme-bg-color, #ffffff);
+            --text-color: var(--tg-theme-text-color, #000000);
+            --btn-color: var(--tg-theme-button-color, #2481cc);
+            --btn-text: var(--tg-theme-button-text-color, #ffffff);
+            --hint-color: var(--tg-theme-hint-color, #999999);
+            --danger-color: #ff3b30;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Top HUD */
+        .hud {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 24px;
+            padding: 15px 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            min-width: 220px;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+        }
+        
+        [data-theme="dark"] .hud {
+            background: rgba(30, 30, 30, 0.85);
+            color: #fff;
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .hud-value {
+            font-size: 40px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #00C6FF, #0072FF);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 2px;
+            line-height: 1.1;
+        }
+        
+        [data-theme="dark"] .hud-value {
+            background: linear-gradient(135deg, #4facfe, #00f2fe);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hud-label {
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--hint-color);
+        }
+
+        .hud-distance {
+            font-size: 14px;
+            margin-top: 8px;
+            color: var(--text-color);
+            font-weight: 600;
+            opacity: 0.8;
+        }
+
+        /* Map Container */
+        #map {
+            flex-grow: 1;
+            width: 100%;
+            z-index: 1;
+        }
+
+        /* Controls Footer */
+        .controls {
+            position: absolute;
+            bottom: 30px;
+            left: 0;
+            width: 100%;
+            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            padding: 0 20px;
+        }
+
+        .btn {
+            flex: 1;
+            max-width: 250px;
+            padding: 16px 24px;
+            font-size: 18px;
+            font-weight: 600;
+            border: none;
+            border-radius: 100px;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-start {
+            background-color: var(--btn-color);
+            color: var(--btn-text);
+        }
+
+        .btn-stop {
+            background-color: var(--danger-color);
+            color: white;
+            display: none;
+        }
+        
+        /* Glass Info Pill */
+        .status-pill {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.65);
+            color: white;
+            padding: 8px 20px;
+            border-radius: 30px;
+            font-size: 13px;
+            font-weight: 600;
+            backdrop-filter: blur(5px);
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        .status-pill.visible {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="hud">
+        <div class="hud-value" id="stepCount">0</div>
+        <div class="hud-label">Qadam</div>
+        <div class="hud-distance" id="distanceDisplay">0.0 metr</div>
+    </div>
+
+    <div id="map"></div>
+    
+    <div class="status-pill" id="statusPill">GPS kutilyapti...</div>
+
+    <div class="controls">
+        <button class="btn btn-start" id="startBtn">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            Boshlash
+        </button>
+        <button class="btn btn-stop" id="stopBtn">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"></rect></svg>
+            To'xtatish
+        </button>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script>
+        // Init Telegram WebApp
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.ready();
+
+        // Check platform theme
+        if (tg.colorScheme === 'dark') {
+            document.body.setAttribute('data-theme', 'dark');
+        }
+
+        // Initialize Map
+        const map = L.map('map', {
+            zoomControl: false,
+            attributionControl: false
+        }).setView([41.311081, 69.240562], 13); // Default to Tashkent coordinates
+
+        // Leaflet attribution
+        L.control.attribution({position: 'bottomright'}).addTo(map);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OSMap'
+        }).addTo(map);
+
+        // State variables
+        let isTracking = false;
+        let watchId = null;
+        let pathLatLngs = [];
+        let totalDistance = 0; // in meters
+        let polyline = null;
+        let currentPositionMarker = null;
+
+        // Constants
+        const STEP_LENGTH_METERS = 0.7;
+        const MIN_DISTANCE_ACCURACY = 2; // meters threshold to add new point against GPS jitter
+
+        // UI Elements
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const stepCountEl = document.getElementById('stepCount');
+        const distanceEl = document.getElementById('distanceDisplay');
+        const statusPill = document.getElementById('statusPill');
+
+        // Custom icon for current position
+        const userIcon = L.divIcon({
+            className: 'custom-user-marker',
+            html: '<div style="width: 18px; height: 18px; background-color: var(--btn-color); border: 3px solid white; border-radius: 50%; box-shadow: 0 0 10px rgba(0,0,0,0.4);"></div>',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
+        });
+
+        function showStatus(msg, timeout = 3000) {
+            statusPill.textContent = msg;
+            statusPill.classList.add('visible');
+            setTimeout(() => {
+                if(!isTracking && statusPill.textContent === msg) {
+                    statusPill.classList.remove('visible');
+                }
+            }, timeout);
+        }
+
+        // Attempt to get initial location to pan map
+        if ("geolocation" in navigator) {
+            navigator.geolocation.getCurrentPosition((position) => {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                map.setView([lat, lng], 16);
+                
+                if (!currentPositionMarker) {
+                    currentPositionMarker = L.marker([lat, lng], {icon: userIcon, zIndexOffset: 1000}).addTo(map);
+                } else {
+                    currentPositionMarker.setLatLng([lat, lng]);
+                }
+            }, (error) => {
+                // Ignore initial error subtly
+            }, { enableHighAccuracy: true });
+        }
+
+        // Tracking Logic
+        startBtn.addEventListener('click', () => {
+            if (!("geolocation" in navigator)) {
+                tg.showAlert("Qurilmangizda GPS funksiyasi mavjud emas.");
+                return;
+            }
+
+            isTracking = true;
+            startBtn.style.display = 'none';
+            stopBtn.style.display = 'flex';
+            
+            showStatus("GPS signali qidirilmoqda...", 5000);
+
+            // Clean previous run
+            if (polyline) {
+                map.removeLayer(polyline);
+            }
+            pathLatLngs = [];
+            totalDistance = 0;
+            updateStats();
+
+            polyline = L.polyline([], {
+                color: 'var(--btn-color, #2481cc)', 
+                weight: 6,
+                opacity: 0.8,
+                lineJoin: 'round',
+                lineCap: 'round'
+            }).addTo(map);
+
+            watchId = navigator.geolocation.watchPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    const accuracy = position.coords.accuracy;
+                    
+                    // Filter out highly inaccurate jumps (e.g. > 40 meters inaccuracy)
+                    if (accuracy > 40) return; 
+
+                    statusPill.classList.remove('visible'); // Hide searching status on fix
+                    
+                    const newPoint = L.latLng(lat, lng);
+                    
+                    if (pathLatLngs.length > 0) {
+                        const lastPoint = pathLatLngs[pathLatLngs.length - 1];
+                        const dist = lastPoint.distanceTo(newPoint);
+                        
+                        // Noise reduction
+                        if (dist > MIN_DISTANCE_ACCURACY) {
+                            totalDistance += dist;
+                            pathLatLngs.push(newPoint);
+                            polyline.addLatLng(newPoint);
+                        }
+                    } else {
+                        // Very first valid tracking point
+                        pathLatLngs.push(newPoint);
+                        polyline.addLatLng(newPoint);
+                        map.setView(newPoint, 18);
+                    }
+
+                    // Always visually update user location
+                    if (!currentPositionMarker) {
+                        currentPositionMarker = L.marker([lat, lng], {icon: userIcon, zIndexOffset: 1000}).addTo(map);
+                    } else {
+                        currentPositionMarker.setLatLng([lat, lng]);
+                    }
+                    map.panTo([lat, lng]);
+
+                    updateStats();
+                },
+                (error) => {
+                    console.error("GPS Error:", error);
+                    let errMsg = "GPS signalida xatolik";
+                    if(error.code === 1) errMsg = "GPS ruxsat etilmagan";
+                    if(error.code === 2) errMsg = "Joylashuv aniqlanmadi";
+                    showStatus(errMsg);
+                },
+                {
+                    enableHighAccuracy: true,
+                    maximumAge: 10000,
+                    timeout: 5000
+                }
+            );
+        });
+
+        stopBtn.addEventListener('click', () => {
+            isTracking = false;
+            startBtn.style.display = 'flex';
+            stopBtn.style.display = 'none';
+            statusPill.classList.remove('visible');
+
+            if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+            
+            // Adjust bounds to show exact walked path if exist
+            if (pathLatLngs.length > 1) {
+                map.fitBounds(polyline.getBounds(), { padding: [50, 50] });
+            }
+            
+            let finalSteps = Math.floor(totalDistance / STEP_LENGTH_METERS);
+            
+            // Haptic Feedback for Telegram
+            if (tg.HapticFeedback) {
+                tg.HapticFeedback.notificationOccurred('success');
+            }
+            
+            tg.showPopup({
+                title: "Ajoyib Natija!",
+                message: `Siz jami ${finalSteps} qadam yurdingiz.\nBosib o'tilgan masofa: ${totalDistance < 1000 ? totalDistance.toFixed(1) + ' metr' : (totalDistance / 1000).toFixed(2) + ' km'}`,
+                buttons: [{type: "close"}]
+            });
+        });
+
+        function updateStats() {
+            let steps = Math.floor(totalDistance / STEP_LENGTH_METERS);
+            
+            // Basic animation for text change
+            if(stepCountEl.textContent != steps) {
+                stepCountEl.style.transform = 'scale(1.1)';
+                setTimeout(() => stepCountEl.style.transform = 'scale(1)', 150);
+            }
+            
+            stepCountEl.textContent = steps;
+            
+            if (totalDistance < 1000) {
+                distanceEl.textContent = totalDistance.toFixed(1) + ' metr';
+            } else {
+                distanceEl.textContent = (totalDistance / 1000).toFixed(2) + ' km';
+            }
+        }
+    </script>
+</body>
+</html>
