@@ -191,10 +191,10 @@
             
             // ASOSIY OLDINGI LOGIKA CONSTANTAlari
             const INACTIVITY_LIMIT_MS = 10 * 60 * 1000;
-            const SPEED_LIMIT_MPS = 5.0; // Eski tezlik xatolari oldini olish uchun kengaytirildi (18km/h gacha chidaydi)
+            const SPEED_LIMIT_MPS = 3.5; // (12km/h)
             const POLYGON_CLOSE_DIST = 15;
             const STEP_LENGTH_METERS = 0.7; // Har 0.7m GPS surilishi bir qadam sanaladi
-            const MIN_DISTANCE_ACCURACY = 1; // 1 metrdan kam harakatlar sanalmaydi
+            const MIN_DISTANCE_ACCURACY = 4; // Zarracha siltanishlar yoki xonadagi adashishlar qadam sanalmasligi uchun JITTER qattiq filtri
 
             const userIcon = L.divIcon({
                 className: 'custom-user-marker',
@@ -423,6 +423,8 @@
                     }, () => {}, { enableHighAccuracy: true });
                 }
             } catch (ignoreErr) {}
+
+            stopBtn.addEventListener('click', () => stopTracking(false));
 
             startBtn.addEventListener('click', () => {
                 if (!("geolocation" in navigator)) {
