@@ -154,7 +154,15 @@
         // DOM to'liq o'qilmaguncha kodni kutish xatoliklarni 100% oldini oladi
         document.addEventListener('DOMContentLoaded', () => {
 
-            const tg = window.Telegram.WebApp;
+            const tg = window.Telegram?.WebApp || {
+                expand: () => {},
+                ready: () => {},
+                colorScheme: 'light',
+                initDataUnsafe: {},
+                showAlert: (msg) => alert(msg),
+                showPopup: (opts) => alert(opts.message),
+                HapticFeedback: null
+            };
             tg.expand();
             tg.ready();
 
