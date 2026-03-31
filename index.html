@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Qadam - Telegram Mini App v2.5</title>
+    <title>Qadam - Telegram Mini App v2.6</title>
 
     <!-- Brauzer eski keshni ishlatmasligi uchun -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
@@ -180,7 +180,7 @@
 <body>
     <div
         style="position: absolute; top: 10px; right: 15px; z-index: 9999; font-size: 14px; font-weight: 800; color: #ff3b30; text-shadow: 0px 0px 3px white;">
-        v2.5</div>
+        v2.6</div>
 
     <div class="hud">
         <div class="hud-value" id="stepCount">0</div>
@@ -445,11 +445,18 @@
                 if (!isTracking) return;
                 const acc = event.accelerationIncludingGravity;
                 if (!acc || acc.x === null) return;
-                const magnitude = Math.sqrt(acc.x ** 2 + acc.y ** 2 + acc.z ** 2);
+                
+                const magnitude = Math.sqrt(acc.x**2 + acc.y**2 + acc.z**2);
                 const delta = Math.abs(magnitude - lastMagnitude);
                 lastMagnitude = magnitude;
                 const now = Date.now();
-                if (delta > 12 && (now - lastStepTime) > 300) {
+                
+                // Debug: har 2 soniyada bir marta delta qiymatini ekranda ko'rsat
+                if (now - lastStepTime > 2000 && delta > 0) {
+                    showStatus(`📳 delta: ${delta.toFixed(1)}`, 1800);
+                }
+                
+                if (delta > 3 && (now - lastStepTime) > 300) {
                     stepCount++;
                     lastStepTime = now;
                     updateStats();
