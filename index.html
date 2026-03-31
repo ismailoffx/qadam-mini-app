@@ -452,37 +452,45 @@
             }
 
             function stopTracking(dueToInactivity = false) {
-                isTracking = false;
-                startBtn.style.display = 'flex';
-                stopBtn.style.display = 'none';
-                statusPill.classList.remove('visible');
-                if (inactivityTimer) clearTimeout(inactivityTimer);
-                if (sensorWatchdog) clearTimeout(sensorWatchdog);
-                
-                if (useSensor) {
-                    window.removeEventListener('devicemotion', handleMotion);
-                }
+                try {
+                    isTracking = false;
+                    startBtn.style.display = 'flex';
+                    stopBtn.style.display = 'none';
+                    statusPill.classList.remove('visible');
+                    if (inactivityTimer) clearTimeout(inactivityTimer);
+                    if (sensorWatchdog) clearTimeout(sensorWatchdog);
+                    
+                    if (useSensor) {
+                        window.removeEventListener('devicemotion', handleMotion);
+                    }
 
-                if (watchId !== null) {
-                    navigator.geolocation.clearWatch(watchId);
-                    watchId = null;
-                }
-                
-                // Sensor bosa sensor, yo'qsa eskichasi
-                let finalSteps = useSensor ? sensorSteps : Math.floor(totalDistance / STEP_LENGTH_METERS);
-                saveStatsToSupabase(finalSteps, totalDistance);
+                    if (watchId !== null) {
+                        navigator.geolocation.clearWatch(watchId);
+                        watchId = null;
+                    }
+                    
+                    let finalSteps = useSensor ? sensorSteps : Math.floor(totalDistance / STEP_LENGTH_METERS);
+                    saveStatsToSupabase(finalSteps, totalDistance);
 
-                if (dueToInactivity) {
-                    tg.showAlert("10 daqiqa harakatsiz bo'lganligi sababli o'yin avtomatik to'xtatildi.");
+                    if (dueToInactivity) {
+                        tg.showAlert("10 daqiqa harakatsiz bo'lganligi sababli o'yin avtomatik to'xtatildi.");
+                    } else {
+                        if (tg.HapticFeedback && typeof tg.HapticFeedback.notificationOccurred === 'function') {
+                            try { tg.HapticFeedback.notificationOccurred('success'); } catch(e){}
+                        }
+                        
+                        tg.showPopup({
+                            title: "O'yin to'xtatildi",
+                            message: `Siz ${finalSteps} qadam yurdingiz.\nMasofa: ${totalDistance < 1000 ? totalDistance.toFixed(1) + ' m' : (totalDistance / 1000).toFixed(2) + ' km'}\nMaydon: ${totalArea.toFixed(1)} m²`,
+                            buttons: [{type: "close"}]
+                        });
+                    }
+
                     if (polyline) map.removeLayer(polyline);
                     pathLatLngs = [];
-                } else {
-                    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-                    tg.showPopup({
-                        title: "O'yin to'xtatildi",
-                        message: `Siz ${finalSteps} qadam yurdingiz.\nBosib o'tilgan masofa: ${totalDistance < 1000 ? totalDistance.toFixed(1) + ' m' : (totalDistance / 1000).toFixed(2) + ' km'}\nUmumiy maydoningiz: ${totalArea.toFixed(1)} m²`,
-                        buttons: [{type: "close"}]
-                    });
+                } catch (err) {
+                    console.error("To'xtatish xatoligi:", err);
+                    alert("To'xtatishda xato: " + err.message);
                 }
             }
 
@@ -556,29 +564,37 @@
                         const lastPoint = pathLatLngs[pathLatLngs.length - 1];
                         const dist = lastPoint.distanceTo(newPoint);
                         
+                        // Jitter (titrash) himoyasi: Faqat ochiq va ravshan haqiqiy o'zgarishlar qabul qilinadi
+                        if (dist < MIN_DISTANCE_ACCURACY) return;
+                        
                         if (lastTimestamp) {
                             const timeDiffSec = (timestamp - lastTimestamp) / 1000;
-                            if (timeDiffSec > 0) {
+                            
+                            // Mikro-sakrashlarni tezlikka aylanishidan (Division by Zero/Infinity) asrash
+                            if (timeDiffSec > 0.5) {
                                 const speed = dist / timeDiffSec;
                                 if (speed > SPEED_LIMIT_MPS) {
-                                    showStatus("Juda tez!", 2000);
-                                    lastTimestamp = timestamp; 
+                                    showStatus("🚫 Juda tez! (Anti-Cheat)", 2000);
+                                    // Izoh: Soxta Tez kelgan nuqtaning vaqtini eslab qolmaymiz! 
+                                    // Bu bilan Deadlock dan himoya qilamiz.
                                     return; 
                                 }
+                            } else if (timeDiffSec > 0) {
+                                // 0.5 sekundan tez qayta-qayta kelib 2 metrdan ko'p sakrasa, bu baribir glitch sakrash
+                                return;
                             }
                         }
 
-                        if (dist > MIN_DISTANCE_ACCURACY) {
-                            totalDistance += dist;
-                            pathLatLngs.push(newPoint);
-                            polyline.addLatLng(newPoint);
-                            lastTimestamp = timestamp;
-                            
-                            if (pathLatLngs.length > 10) {
-                                const distanceToStart = newPoint.distanceTo(pathLatLngs[0]);
-                                if (distanceToStart <= POLYGON_CLOSE_DIST) {
-                                    handlePolygonClosure();
-                                }
+                        // Qabul qilingan masofa va nuqtaviy jarayon
+                        totalDistance += dist;
+                        pathLatLngs.push(newPoint);
+                        polyline.addLatLng(newPoint);
+                        lastTimestamp = timestamp;
+                        
+                        if (pathLatLngs.length > 10) {
+                            const distanceToStart = newPoint.distanceTo(pathLatLngs[0]);
+                            if (distanceToStart <= POLYGON_CLOSE_DIST) {
+                                handlePolygonClosure();
                             }
                         }
                     } else {
