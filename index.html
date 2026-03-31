@@ -184,23 +184,13 @@
             
             let lastTimestamp = null;
             let inactivityTimer = null;
-            const INACTIVITY_LIMIT_MS = 10 * 60 * 1000;
-            const SPEED_LIMIT_MPS = 1.94;
-            const POLYGON_CLOSE_DIST = 15;
-            const STEP_LENGTH_METERS = 0.7;
-            const MIN_DISTANCE_ACCURACY = 2;
-
-            // QADAM HISOBLASH (SENSOR VA ZAXIRA)
-            let useSensor = false;
-            let sensorSteps = 0;
-            let lastStepTime = 0;
             
-            // Pedometer Logikalari
-            let gravityMag = 0; 
-            let isPeak = false;
-            const STEP_THRESHOLD = 2.0;
-            let firstMotionReceived = false;
-            let sensorWatchdog = null;
+            // ASOSIY OLDINGI LOGIKA CONSTANTAlari
+            const INACTIVITY_LIMIT_MS = 10 * 60 * 1000;
+            const SPEED_LIMIT_MPS = 5.0; // Eski tezlik xatolari oldini olish uchun kengaytirildi (18km/h gacha chidaydi)
+            const POLYGON_CLOSE_DIST = 15;
+            const STEP_LENGTH_METERS = 0.7; // Har 0.7m GPS surilishi bir qadam sanaladi
+            const MIN_DISTANCE_ACCURACY = 1; // 1 metrdan kam harakatlar sanalmaydi
 
             const userIcon = L.divIcon({
                 className: 'custom-user-marker',
@@ -217,13 +207,12 @@
                     if (!isTracking) {
                         statusPill.classList.remove('visible'); 
                     } else if (statusPill.textContent === captureMsg) {
-                        // Agar tracking vaqtida o'tkinchi xabar o'chsa, orqa fonga tegishli indikatorni ko'rsatamiz
-                        statusPill.textContent = useSensor ? '📱 Sensor orqali ishlamoqda' : '🛰 GPS orqali ishlamoqda';
+                        statusPill.classList.remove('visible');
                     }
                 }, timeout);
             }
 
-            // SUPABASE HIMOYA ULANISHI
+            // SUPABASE BO'LIMI
             let supabase = null;
             try {
                 if (window.supabase) {
@@ -231,11 +220,11 @@
                     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF4bmNzZGl2a293a2d5ZHRqb2tyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MTAwOTYsImV4cCI6MjA5MDQ4NjA5Nn0.NtAgZcAlQgvsMSMe325n0AW8-Cmz31KD-OGJUFmvhGo';
                     supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
                 } else {
-                    console.warn("Supabase CDN ulanmadi! O'yin avtonom (offline) rejimga o'tdi.");
+                    console.warn("Supabase CDN ulanmadi! O'yin avtonom rejimda.");
                     showStatus("Offline rejim", 3000);
                 }
             } catch (err) {
-                console.error("Supabase Client yaratishda xato:", err);
+                console.error("Supabase Client xatosi:", err);
                 supabase = null;
             }
 
@@ -250,8 +239,6 @@
                             username: tgUser.username || '' 
                         }, { onConflict: 'telegram_id' });
 
-                    if (userError) console.error("User saqlash xatosi:", userError);
-
                     await loadAllTerritories();
 
                     supabase
@@ -262,9 +249,7 @@
                                 if (newTerritory.user_id !== tgUser.id) {
                                     drawTerritoryPolygon(newTerritory.polygon_coords, newTerritory.user_id);
                                 }
-                            } catch (evtErr) {
-                                console.error("Real-time hodisa xatosi:", evtErr);
-                            }
+                            } catch (evtErr) {}
                         })
                         .subscribe();
                         
@@ -289,36 +274,30 @@
                         totalArea = myArea;
                         updateStats();
                     }
-                } catch (e) {
-                    console.error("loadAllTerritories xatosi:", e);
-                }
+                } catch (e) {}
             }
 
             async function saveStatsToSupabase(steps, dist) {
                 if (!supabase || steps === 0) return;
                 try {
-                    const { error } = await supabase.from('steps_stats').insert({
+                    await supabase.from('steps_stats').insert({
                         user_id: tgUser.id,
                         steps: steps,
                         distance_meters: dist,
                         date: new Date().toISOString()
                     });
-                } catch (e) {
-                    console.error("saveStatsToSupabase xato tasnifi:", e);
-                }
+                } catch (e) {}
             }
 
             async function saveTerritoryToSupabase(coords, area) {
                 if (!supabase) return;
                 try {
-                    const { error } = await supabase.from('territories').insert({
+                    await supabase.from('territories').insert({
                         user_id: tgUser.id,
                         polygon_coords: coords,
                         area_sqm: area
                     });
-                } catch (e) {
-                    console.error("saveTerritory xato tasnifi:", e);
-                }
+                } catch (e) {}
             }
 
             function drawTerritoryPolygon(coords, ownerId) {
@@ -335,9 +314,7 @@
                         weight: 2
                     }).addTo(map);
                     polygons.push(poly);
-                } catch (e) {
-                    console.error("Poligon chizishda ichki xato:", e);
-                }
+                } catch (e) {}
             }
 
             initGameSystem();
@@ -374,7 +351,10 @@
                 drawTerritoryPolygon(jsonCoords, tgUser.id);
                 saveTerritoryToSupabase(jsonCoords, area);
 
-                if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+                if (tg.HapticFeedback && typeof tg.HapticFeedback.notificationOccurred === 'function') {
+                    try { tg.HapticFeedback.notificationOccurred('success'); } catch(e){}
+                }
+                
                 tg.showPopup({
                     title: "Hudud egallandi!",
                     message: `Siz ${area.toFixed(1)} kv.m maydonni yopdingiz!`,
@@ -387,110 +367,47 @@
                 updateStats();
             }
 
-            // SENSOR QADAMLARI LOGIKASI
-            function handleMotion(event) {
-                if (!isTracking) return;
-                firstMotionReceived = true; // Watchdog uchun
-                
-                const accel = event.accelerationIncludingGravity;
-                if (!accel) {
-                    if (useSensor) {
-                        useSensor = false;
-                        showStatus("Sensor ishlamayapti, 🛰 GPS dagi masofaga o'tildi", 3000);
-                        window.removeEventListener('devicemotion', handleMotion);
-                    }
-                    return;
-                }
-                
-                let x = accel.x || 0;
-                let y = accel.y || 0;
-                let z = accel.z || 0;
-                
-                let magnitude = Math.sqrt(x*x + y*y + z*z);
-                let now = Date.now();
-
-                // 1. Low-Pass Filter
-                if (gravityMag === 0) gravityMag = magnitude;
-                gravityMag = gravityMag * 0.9 + magnitude * 0.1;
-                
-                // 2. High-Pass Filter (Foydalanuvchi qadami)
-                let userAccel = magnitude - gravityMag;
-                
-                // 3. Peak Detection
-                if (userAccel > STEP_THRESHOLD) {
-                    if (!isPeak && (now - lastStepTime > 300)) {
-                        sensorSteps++;
-                        lastStepTime = now;
-                        isPeak = true;
-                        updateStats();
-                    }
-                } else if (userAccel < 0) {
-                    isPeak = false;
-                }
-            }
-
-            async function requestDeviceMotion() {
-                if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-                    try {
-                        const permissionState = await DeviceMotionEvent.requestPermission();
-                        if (permissionState === 'granted') {
-                            useSensor = true;
-                            window.addEventListener('devicemotion', handleMotion);
-                        } else {
-                            useSensor = false;
-                        }
-                    } catch (e) {
-                        console.error('Sensor ruxsati olinmadi:', e);
-                        useSensor = false;
-                    }
-                } else if ('DeviceMotionEvent' in window) {
-                    useSensor = true;
-                    window.addEventListener('devicemotion', handleMotion);
-                } else {
-                    useSensor = false;
-                }
-            }
-
+            // ESKI QADAM METODIGA O'TISH - GPS ORQALI! TO'XTATISH TUGMASI HIMOYA OSTIDA!
             function stopTracking(dueToInactivity = false) {
                 try {
                     isTracking = false;
                     startBtn.style.display = 'flex';
                     stopBtn.style.display = 'none';
                     statusPill.classList.remove('visible');
-                    if (inactivityTimer) clearTimeout(inactivityTimer);
-                    if (sensorWatchdog) clearTimeout(sensorWatchdog);
                     
-                    if (useSensor) {
-                        window.removeEventListener('devicemotion', handleMotion);
-                    }
+                    if (inactivityTimer) clearTimeout(inactivityTimer);
 
                     if (watchId !== null) {
                         navigator.geolocation.clearWatch(watchId);
                         watchId = null;
                     }
                     
-                    let finalSteps = useSensor ? sensorSteps : Math.floor(totalDistance / STEP_LENGTH_METERS);
+                    let finalSteps = Math.floor(totalDistance / STEP_LENGTH_METERS);
                     saveStatsToSupabase(finalSteps, totalDistance);
 
                     if (dueToInactivity) {
-                        tg.showAlert("10 daqiqa harakatsiz bo'lganligi sababli o'yin avtomatik to'xtatildi.");
+                        try { tg.showAlert("10 daqiqa harakatsiz bo'lganligi sababli o'yin avtomatik to'xtatildi."); } catch(e){}
                     } else {
                         if (tg.HapticFeedback && typeof tg.HapticFeedback.notificationOccurred === 'function') {
                             try { tg.HapticFeedback.notificationOccurred('success'); } catch(e){}
                         }
                         
-                        tg.showPopup({
-                            title: "O'yin to'xtatildi",
-                            message: `Siz ${finalSteps} qadam yurdingiz.\nMasofa: ${totalDistance < 1000 ? totalDistance.toFixed(1) + ' m' : (totalDistance / 1000).toFixed(2) + ' km'}\nMaydon: ${totalArea.toFixed(1)} m²`,
-                            buttons: [{type: "close"}]
-                        });
+                        try {
+                            tg.showPopup({
+                                title: "O'yin to'xtatildi",
+                                message: `Siz ${finalSteps} qadam yurdingiz.\nMasofa: ${totalDistance < 1000 ? totalDistance.toFixed(1) + ' m' : (totalDistance / 1000).toFixed(2) + ' km'}\nMaydon: ${totalArea.toFixed(1)} m²`,
+                                buttons: [{type: "close"}]
+                            });
+                        } catch(e) {
+                            alert(`O'yin to'xtatildi!\nQadam: ${finalSteps}\nMasofa: ${totalDistance < 1000 ? totalDistance.toFixed(1) + ' m' : (totalDistance / 1000).toFixed(2) + ' km'}`);
+                        }
                     }
 
                     if (polyline) map.removeLayer(polyline);
                     pathLatLngs = [];
                 } catch (err) {
                     console.error("To'xtatish xatoligi:", err);
-                    alert("To'xtatishda xato: " + err.message);
+                    try { tg.showAlert("To'xtatishda xato: " + err.message); } catch(ex){}
                 }
             }
 
@@ -503,39 +420,17 @@
                 }
             } catch (ignoreErr) {}
 
-            startBtn.addEventListener('click', async () => {
+            startBtn.addEventListener('click', () => {
                 if (!("geolocation" in navigator)) {
                     tg.showAlert("Qurilmangizda GPS yo'q.");
                     return;
                 }
                 
-                // 1. IOS permission olish (Kutish)
-                await requestDeviceMotion();
-
                 isTracking = true;
                 startBtn.style.display = 'none';
                 stopBtn.style.display = 'flex';
                 
-                sensorSteps = 0;
-                lastStepTime = Date.now();
-                gravityMag = 0;
-                isPeak = false;
-                
-                // Sensor Watchdog (Yangi)
-                firstMotionReceived = false;
-                if (sensorWatchdog) clearTimeout(sensorWatchdog);
-                if (useSensor) {
-                    sensorWatchdog = setTimeout(() => {
-                        if (isTracking && !firstMotionReceived) {
-                            useSensor = false;
-                            window.removeEventListener('devicemotion', handleMotion);
-                            showStatus("Sensor ishlamayapti, 🛰 GPS ga o'tildi", 4000);
-                            setTimeout(() => { if (isTracking) statusPill.textContent = '🛰 GPS orqali ishlamoqda'; }, 4000);
-                        }
-                    }, 3000);
-                }
-                
-                showStatus("Qadam hisobi boshlandi!");
+                showStatus("GPS Qadam hisoblamoqda...");
 
                 if (polyline) map.removeLayer(polyline);
                 pathLatLngs = []; 
@@ -556,7 +451,8 @@
                     
                     resetInactivityTimer(); 
 
-                    if (accuracy > 40) return; 
+                    // Jiddiy GPS noaniqligini himoya qilamiz, 60 metrdan xira xatolikni inobatga olmagan ma'qul
+                    if (accuracy > 60) return; 
                     
                     const newPoint = L.latLng(lat, lng);
                     
@@ -564,19 +460,18 @@
                         const lastPoint = pathLatLngs[pathLatLngs.length - 1];
                         const dist = lastPoint.distanceTo(newPoint);
                         
-                        // Jitter (titrash) himoyasi: Faqat ochiq va ravshan haqiqiy o'zgarishlar qabul qilinadi
+                        // Kichik GPS titrashlari inkor etiladi! Bu tezlik yoki masofaga mutlaqo kirmaydi.
                         if (dist < MIN_DISTANCE_ACCURACY) return;
                         
+                        // Faqat haqiqiy uzoq masofa bilan vaqt farqini o'lchaymiz!
                         if (lastTimestamp) {
                             const timeDiffSec = (timestamp - lastTimestamp) / 1000;
-                            
-                            // Mikro-sakrashlarni tezlikka aylanishidan (Division by Zero/Infinity) asrash
+                            // Vaqt kamida 0.5 sek o'tgan bo'lishi kerak. Mikro burst bo'linmada tezlikni cheksiz oshirib masofani bekor qilardi.
                             if (timeDiffSec > 0.5) {
                                 const speed = dist / timeDiffSec;
                                 if (speed > SPEED_LIMIT_MPS) {
-                                    showStatus("🚫 Juda tez! (Anti-Cheat)", 2000);
-                                    // Izoh: Soxta Tez kelgan nuqtaning vaqtini eslab qolmaymiz! 
-                                    // Bu bilan Deadlock dan himoya qilamiz.
+                                    showStatus("🚫 Moshinaga o'xshaysiz! (Anti-Cheat)", 2000);
+                                    // Izoh: Soxta Tez kelgan nuqtaning vaqtini eslab qolmaymiz! Bu bilan Deadlock dan himoya qilamiz.
                                     return; 
                                 }
                             } else if (timeDiffSec > 0) {
@@ -585,7 +480,7 @@
                             }
                         }
 
-                        // Qabul qilingan masofa va nuqtaviy jarayon
+                        // HAQIQIY MASOFA Yig'ildi!
                         totalDistance += dist;
                         pathLatLngs.push(newPoint);
                         polyline.addLatLng(newPoint);
@@ -611,21 +506,18 @@
                     }
                     map.panTo([lat, lng]);
                     
-                    // Agar sensor ishlayotgan bo'lsa, xarita o'zgargani bilan qadamni GPS dan OLMANG
-                    // Agar sensor ishlAMAYOTGAN bo'lsa, qadamni yangilang:
-                    if (!useSensor) {
-                        updateStats();
-                    }
+                    // Har doim o'zgarishni ekranga yozamiz
+                    updateStats();
                     
                 }, (error) => {
-                    showStatus("GPS signalida xatolik");
+                    showStatus("GPS signal kutilmoqda...", 2000);
                     resetInactivityTimer();
                 }, { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 });
             });
 
             function updateStats() {
-                // Asosiy: Agar Sensor bo'lsa sensordan, bo'lmasa masofadan qadam chiqariladi
-                let steps = useSensor ? sensorSteps : Math.floor(totalDistance / STEP_LENGTH_METERS);
+                // To'liq avvalgi usul! qadam masofaga teng!
+                let steps = Math.floor(totalDistance / STEP_LENGTH_METERS);
                 if(stepCountEl.textContent != steps) {
                     stepCountEl.style.transform = 'scale(1.1)';
                     setTimeout(() => stepCountEl.style.transform = 'scale(1)', 150);
