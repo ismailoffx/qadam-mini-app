@@ -192,12 +192,12 @@
             
             // ASOSIY OLDINGI LOGIKA CONSTANTAlari
             const INACTIVITY_LIMIT_MS = 10 * 60 * 1000;
-            const SPEED_LIMIT_MPS = 3.5; // (12km/h)
+            const SPEED_LIMIT_MPS = 4.0; // (14km/h gacha)
             const POLYGON_CLOSE_DIST = 15;
-            // GPS Zig-zag yurishi uzoqroq distansiya berganligi sababli, 
-            // 20 qadamga 40 ta sanalish xatosini tuzatish uchun qadam uzunligini kengaytiramiz (Masalan: 1.4 m = 1 qadam deb olinadi)
-            const STEP_LENGTH_METERS = 1.4; 
-            const MIN_DISTANCE_ACCURACY = 4; // Zarracha siltanishlar yoki xonadagi adashishlar qadam sanalmasligi uchun JITTER qattiq filtri
+            // Keng qadam - 0.8 / 1 qadam qilib olamiz (Kutish vaqtini kamaytirish uchun)
+            const STEP_LENGTH_METERS = 0.8; 
+            // 2 metrli masofa - Dastur tezroq o'ylashi uchun GPS xatosi pasaytirildi
+            const MIN_DISTANCE_ACCURACY = 2; // (2 metrdan keyingina qadam ko'payadi, xonada sekin ishlashi mumkin)
 
             const userIcon = L.divIcon({
                 className: 'custom-user-marker',
@@ -460,8 +460,11 @@
                     
                     resetInactivityTimer(); 
 
-                    // Jiddiy GPS noaniqligini himoya qilamiz, 60 metrdan xira xatolikni inobatga olmagan ma'qul
-                    if (accuracy > 60) return; 
+                    // Jiddiy GPS noaniqligi. Uy ichida signal zaiflashishi mumkin
+                    if (accuracy > 60) {
+                        showStatus(`📍 GPS noaniq (${Math.floor(accuracy)}m). Ochiq havoga chiqing!`, 3000);
+                        return; 
+                    }
                     
                     const newPoint = L.latLng(lat, lng);
                     
