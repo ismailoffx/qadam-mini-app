@@ -123,6 +123,7 @@
     </style>
 </head>
 <body>
+    <div style="position: absolute; top: 10px; right: 15px; z-index: 9999; font-size: 14px; font-weight: 800; color: #ff3b30; text-shadow: 0px 0px 3px white;">v2.1</div>
 
     <div class="hud">
         <div class="hud-value" id="stepCount">0</div>
@@ -193,7 +194,9 @@
             const INACTIVITY_LIMIT_MS = 10 * 60 * 1000;
             const SPEED_LIMIT_MPS = 3.5; // (12km/h)
             const POLYGON_CLOSE_DIST = 15;
-            const STEP_LENGTH_METERS = 0.7; // Har 0.7m GPS surilishi bir qadam sanaladi
+            // GPS Zig-zag yurishi uzoqroq distansiya berganligi sababli, 
+            // 20 qadamga 40 ta sanalish xatosini tuzatish uchun qadam uzunligini kengaytiramiz (Masalan: 1.4 m = 1 qadam deb olinadi)
+            const STEP_LENGTH_METERS = 1.4; 
             const MIN_DISTANCE_ACCURACY = 4; // Zarracha siltanishlar yoki xonadagi adashishlar qadam sanalmasligi uchun JITTER qattiq filtri
 
             const userIcon = L.divIcon({
