@@ -451,12 +451,7 @@
                 lastMagnitude = magnitude;
                 const now = Date.now();
                 
-                // Debug: har 2 soniyada bir marta delta qiymatini ekranda ko'rsat
-                if (now - lastStepTime > 2000 && delta > 0) {
-                    showStatus(`📳 delta: ${delta.toFixed(1)}`, 1800);
-                }
-                
-                if (delta > 3 && (now - lastStepTime) > 300) {
+                if (delta > 1.8 && (now - lastStepTime) > 350) {
                     stepCount++;
                     lastStepTime = now;
                     updateStats();
