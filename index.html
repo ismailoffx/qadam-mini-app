@@ -193,8 +193,14 @@
             // QADAM HISOBLASH (SENSOR VA ZAXIRA)
             let useSensor = false;
             let sensorSteps = 0;
-            let lastMagnitude = 0;
             let lastStepTime = 0;
+            
+            // Pedometer Logikalari
+            let gravityMag = 0; 
+            let isPeak = false;
+            const STEP_THRESHOLD = 2.0;
+            let firstMotionReceived = false;
+            let sensorWatchdog = null;
 
             const userIcon = L.divIcon({
                 className: 'custom-user-marker',
@@ -384,24 +390,43 @@
             // SENSOR QADAMLARI LOGIKASI
             function handleMotion(event) {
                 if (!isTracking) return;
+                firstMotionReceived = true; // Watchdog uchun
+                
                 const accel = event.accelerationIncludingGravity;
-                if (!accel) return;
+                if (!accel) {
+                    if (useSensor) {
+                        useSensor = false;
+                        showStatus("Sensor ishlamayapti, 🛰 GPS dagi masofaga o'tildi", 3000);
+                        window.removeEventListener('devicemotion', handleMotion);
+                    }
+                    return;
+                }
                 
                 let x = accel.x || 0;
                 let y = accel.y || 0;
                 let z = accel.z || 0;
                 
                 let magnitude = Math.sqrt(x*x + y*y + z*z);
-                let delta = Math.abs(magnitude - lastMagnitude);
-                
                 let now = Date.now();
+
+                // 1. Low-Pass Filter
+                if (gravityMag === 0) gravityMag = magnitude;
+                gravityMag = gravityMag * 0.9 + magnitude * 0.1;
                 
-                if (delta > 12 && (now - lastStepTime > 300)) {
-                    sensorSteps++;
-                    lastStepTime = now;
-                    updateStats();
+                // 2. High-Pass Filter (Foydalanuvchi qadami)
+                let userAccel = magnitude - gravityMag;
+                
+                // 3. Peak Detection
+                if (userAccel > STEP_THRESHOLD) {
+                    if (!isPeak && (now - lastStepTime > 300)) {
+                        sensorSteps++;
+                        lastStepTime = now;
+                        isPeak = true;
+                        updateStats();
+                    }
+                } else if (userAccel < 0) {
+                    isPeak = false;
                 }
-                lastMagnitude = magnitude;
             }
 
             async function requestDeviceMotion() {
@@ -432,6 +457,7 @@
                 stopBtn.style.display = 'none';
                 statusPill.classList.remove('visible');
                 if (inactivityTimer) clearTimeout(inactivityTimer);
+                if (sensorWatchdog) clearTimeout(sensorWatchdog);
                 
                 if (useSensor) {
                     window.removeEventListener('devicemotion', handleMotion);
@@ -483,8 +509,23 @@
                 stopBtn.style.display = 'flex';
                 
                 sensorSteps = 0;
-                lastMagnitude = 0;
                 lastStepTime = Date.now();
+                gravityMag = 0;
+                isPeak = false;
+                
+                // Sensor Watchdog (Yangi)
+                firstMotionReceived = false;
+                if (sensorWatchdog) clearTimeout(sensorWatchdog);
+                if (useSensor) {
+                    sensorWatchdog = setTimeout(() => {
+                        if (isTracking && !firstMotionReceived) {
+                            useSensor = false;
+                            window.removeEventListener('devicemotion', handleMotion);
+                            showStatus("Sensor ishlamayapti, 🛰 GPS ga o'tildi", 4000);
+                            setTimeout(() => { if (isTracking) statusPill.textContent = '🛰 GPS orqali ishlamoqda'; }, 4000);
+                        }
+                    }, 3000);
+                }
                 
                 showStatus("Qadam hisobi boshlandi!");
 
