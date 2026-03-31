@@ -1,16 +1,17 @@
 <!DOCTYPE html>
 <html lang="uz">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Qadam - Telegram Mini App v2.4</title>
-    
+    <title>Qadam - Telegram Mini App v2.5</title>
+
     <!-- Brauzer eski keshni ishlatmasligi uchun -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4/dist/umd/supabase.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
@@ -26,8 +27,11 @@
         }
 
         * {
-            box-sizing: border-box; margin: 0; padding: 0;
-            user-select: none; -webkit-user-select: none;
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
         }
 
         body {
@@ -42,7 +46,8 @@
 
         .hud {
             position: absolute;
-            top: 20px; left: 50%;
+            top: 20px;
+            left: 50%;
             transform: translateX(-50%);
             z-index: 1000;
             background: rgba(255, 255, 255, 0.85);
@@ -54,7 +59,7 @@
             min-width: 220px;
             border: 1px solid rgba(255, 255, 255, 0.4);
         }
-        
+
         [data-theme="dark"] .hud {
             background: rgba(30, 30, 30, 0.85);
             color: #fff;
@@ -70,7 +75,7 @@
             margin-bottom: 2px;
             line-height: 1.1;
         }
-        
+
         [data-theme="dark"] .hud-value {
             background: linear-gradient(135deg, #4facfe, #00f2fe);
             -webkit-background-clip: text;
@@ -78,52 +83,104 @@
         }
 
         .hud-label {
-            font-size: 13px; font-weight: 600;
-            text-transform: uppercase; letter-spacing: 1.5px;
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
             color: var(--hint-color);
         }
 
         .hud-stats {
-            display: flex; justify-content: space-between;
-            margin-top: 10px; font-size: 13px; font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+            font-size: 13px;
+            font-weight: 600;
             border-top: 1px solid rgba(150, 150, 150, 0.3);
             padding-top: 8px;
             gap: 10px;
         }
 
-        #map { flex-grow: 1; width: 100%; z-index: 1; }
+        #map {
+            flex-grow: 1;
+            width: 100%;
+            z-index: 1;
+        }
 
         .controls {
-            position: absolute; bottom: 30px; left: 0;
-            width: 100%; z-index: 1000;
-            display: flex; justify-content: center; gap: 15px; padding: 0 20px;
+            position: absolute;
+            bottom: 30px;
+            left: 0;
+            width: 100%;
+            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            padding: 0 20px;
         }
 
         .btn {
-            flex: 1; max-width: 250px; padding: 16px 24px;
-            font-size: 18px; font-weight: 600;
-            border: none; border-radius: 100px;
-            cursor: pointer; transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            flex: 1;
+            max-width: 250px;
+            padding: 16px 24px;
+            font-size: 18px;
+            font-weight: 600;
+            border: none;
+            border-radius: 100px;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
-            display: flex; align-items: center; justify-content: center; gap: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
         }
 
-        .btn:active { transform: scale(0.95); box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1); }
-        .btn-start { background-color: var(--btn-color); color: var(--btn-text); }
-        .btn-stop { background-color: var(--danger-color); color: white; display: none; }
-        
-        .status-pill {
-            position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%);
-            z-index: 1000; background: rgba(0, 0, 0, 0.65); color: white;
-            padding: 8px 20px; border-radius: 30px; font-size: 13px; font-weight: 600;
-            backdrop-filter: blur(5px); opacity: 0; transition: opacity 0.3s;
-            pointer-events: none; white-space: nowrap;
+        .btn:active {
+            transform: scale(0.95);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
         }
-        .status-pill.visible { opacity: 1; }
+
+        .btn-start {
+            background-color: var(--btn-color);
+            color: var(--btn-text);
+        }
+
+        .btn-stop {
+            background-color: var(--danger-color);
+            color: white;
+            display: none;
+        }
+
+        .status-pill {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.65);
+            color: white;
+            padding: 8px 20px;
+            border-radius: 30px;
+            font-size: 13px;
+            font-weight: 600;
+            backdrop-filter: blur(5px);
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        .status-pill.visible {
+            opacity: 1;
+        }
     </style>
 </head>
+
 <body>
-    <div style="position: absolute; top: 10px; right: 15px; z-index: 9999; font-size: 14px; font-weight: 800; color: #ff3b30; text-shadow: 0px 0px 3px white;">v2.4</div>
+    <div
+        style="position: absolute; top: 10px; right: 15px; z-index: 9999; font-size: 14px; font-weight: 800; color: #ff3b30; text-shadow: 0px 0px 3px white;">
+        v2.5</div>
 
     <div class="hud">
         <div class="hud-value" id="stepCount">0</div>
@@ -139,11 +196,16 @@
 
     <div class="controls">
         <button class="btn btn-start" id="startBtn">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
             Boshlash
         </button>
         <button class="btn btn-stop" id="stopBtn">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"></rect></svg>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="6" width="12" height="12"></rect>
+            </svg>
             To'xtatish
         </button>
     </div>
@@ -153,8 +215,8 @@
         document.addEventListener('DOMContentLoaded', () => {
 
             const tg = window.Telegram?.WebApp || {
-                expand: () => {},
-                ready: () => {},
+                expand: () => { },
+                ready: () => { },
                 colorScheme: 'light',
                 initDataUnsafe: {},
                 showAlert: (msg) => alert(msg),
@@ -167,9 +229,9 @@
             const tgUser = tg.initDataUnsafe?.user || { id: 111111, first_name: "Mehmon", username: "mehmon" };
             if (tg.colorScheme === 'dark') document.body.setAttribute('data-theme', 'dark');
 
-            const map = L.map('map', {zoomControl: false, attributionControl: false}).setView([41.311081, 69.240562], 13);
-            L.control.attribution({position: 'bottomright'}).addTo(map);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '© OSMap'}).addTo(map);
+            const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([41.311081, 69.240562], 13);
+            L.control.attribution({ position: 'bottomright' }).addTo(map);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OSMap' }).addTo(map);
 
             const startBtn = document.getElementById('startBtn');
             const stopBtn = document.getElementById('stopBtn');
@@ -181,26 +243,26 @@
             let isTracking = false;
             let watchId = null;
             let pathLatLngs = [];
-            let totalDistance = 0; 
+            let totalDistance = 0;
             let totalArea = 0;
             let polyline = null;
             let currentPositionMarker = null;
             let polygons = [];
-            
+
             let lastTimestamp = null;
             let inactivityTimer = null;
-            
+
             let stepCount = 0;
             let lastMagnitude = 0;
             let lastStepTime = 0;
             let motionMode = false; // true = akselerometr, false = GPS
-            
+
             // ASOSIY OLDINGI LOGIKA CONSTANTAlari
             const INACTIVITY_LIMIT_MS = 10 * 60 * 1000;
             const SPEED_LIMIT_MPS = 4.0; // (14km/h gacha)
             const POLYGON_CLOSE_DIST = 15;
             // Keng qadam o'rniga chaqqonroq (0.6 metrdan 1 qadam) deb olamiz
-            const STEP_LENGTH_METERS = 0.6; 
+            const STEP_LENGTH_METERS = 0.6;
             // 0.5 metrlik eng sezgir GPS masofa qo'yildi - bu uydagi eng kichik yurishlarni ham sanaydi (Garchi ba'zida joyida ozgina qaltirab tursa ham qadam sanaydi lekin juda sezgir!)
             const MIN_DISTANCE_ACCURACY = 0.5;
 
@@ -213,11 +275,11 @@
             function showStatus(msg, timeout = 3000) {
                 statusPill.textContent = msg;
                 statusPill.classList.add('visible');
-                
+
                 let captureMsg = msg;
-                setTimeout(() => { 
+                setTimeout(() => {
                     if (!isTracking) {
-                        statusPill.classList.remove('visible'); 
+                        statusPill.classList.remove('visible');
                     } else if (statusPill.textContent === captureMsg) {
                         statusPill.classList.remove('visible');
                     }
@@ -241,14 +303,14 @@
             }
 
             async function initGameSystem() {
-                if (!supabase) return; 
+                if (!supabase) return;
                 try {
                     const { error: userError } = await supabase
                         .from('users')
-                        .upsert({ 
-                            telegram_id: tgUser.id, 
-                            first_name: tgUser.first_name || '', 
-                            username: tgUser.username || '' 
+                        .upsert({
+                            telegram_id: tgUser.id,
+                            first_name: tgUser.first_name || '',
+                            username: tgUser.username || ''
                         }, { onConflict: 'telegram_id' });
 
                     await loadAllTerritories();
@@ -261,10 +323,10 @@
                                 if (newTerritory.user_id !== tgUser.id) {
                                     drawTerritoryPolygon(newTerritory.polygon_coords, newTerritory.user_id);
                                 }
-                            } catch (evtErr) {}
+                            } catch (evtErr) { }
                         })
                         .subscribe();
-                        
+
                     showStatus("Tizimga ulandi!", 2000);
                 } catch (e) {
                     console.error("initGameSystem xatosi.", e);
@@ -286,7 +348,7 @@
                         totalArea = myArea;
                         updateStats();
                     }
-                } catch (e) {}
+                } catch (e) { }
             }
 
             async function saveStatsToSupabase(steps, dist) {
@@ -298,7 +360,7 @@
                         distance_meters: dist,
                         date: new Date().toISOString()
                     });
-                } catch (e) {}
+                } catch (e) { }
             }
 
             async function saveTerritoryToSupabase(coords, area) {
@@ -309,7 +371,7 @@
                         polygon_coords: coords,
                         area_sqm: area
                     });
-                } catch (e) {}
+                } catch (e) { }
             }
 
             function drawTerritoryPolygon(coords, ownerId) {
@@ -326,7 +388,7 @@
                         weight: 2
                     }).addTo(map);
                     polygons.push(poly);
-                } catch (e) {}
+                } catch (e) { }
             }
 
             initGameSystem();
@@ -349,7 +411,7 @@
                 if (inactivityTimer) clearTimeout(inactivityTimer);
                 inactivityTimer = setTimeout(() => {
                     if (isTracking) {
-                        stopTracking(true); 
+                        stopTracking(true);
                     }
                 }, INACTIVITY_LIMIT_MS);
             }
@@ -357,25 +419,25 @@
             function handlePolygonClosure() {
                 const area = getGeodesicArea(pathLatLngs);
                 totalArea += area;
-                
+
                 const jsonCoords = pathLatLngs.map(p => ({ lat: p.lat, lng: p.lng }));
-                
+
                 drawTerritoryPolygon(jsonCoords, tgUser.id);
                 saveTerritoryToSupabase(jsonCoords, area);
 
                 if (tg.HapticFeedback && typeof tg.HapticFeedback.notificationOccurred === 'function') {
-                    try { tg.HapticFeedback.notificationOccurred('success'); } catch(e){}
+                    try { tg.HapticFeedback.notificationOccurred('success'); } catch (e) { }
                 }
-                
+
                 tg.showPopup({
                     title: "Hudud egallandi!",
                     message: `Siz ${area.toFixed(1)} kv.m maydonni yopdingiz!`,
-                    buttons: [{type: "close"}]
+                    buttons: [{ type: "close" }]
                 });
 
                 if (polyline) map.removeLayer(polyline);
                 pathLatLngs = [];
-                polyline = L.polyline([], { color: 'var(--btn-color, #2481cc)', weight: 6, opacity: 0.8, lineJoin: 'round', lineCap: 'round'}).addTo(map);
+                polyline = L.polyline([], { color: 'var(--btn-color, #2481cc)', weight: 6, opacity: 0.8, lineJoin: 'round', lineCap: 'round' }).addTo(map);
                 updateStats();
             }
 
@@ -383,7 +445,7 @@
                 if (!isTracking) return;
                 const acc = event.accelerationIncludingGravity;
                 if (!acc || acc.x === null) return;
-                const magnitude = Math.sqrt(acc.x**2 + acc.y**2 + acc.z**2);
+                const magnitude = Math.sqrt(acc.x ** 2 + acc.y ** 2 + acc.z ** 2);
                 const delta = Math.abs(magnitude - lastMagnitude);
                 lastMagnitude = magnitude;
                 const now = Date.now();
@@ -402,36 +464,35 @@
                     startBtn.style.display = 'flex';
                     stopBtn.style.display = 'none';
                     statusPill.classList.remove('visible');
-                    
-                    if (inactivityTimer) clearTimeout(inactivityTimer);
 
-                    window.removeEventListener('devicemotion', handleMotion);
-                    motionMode = false;
+                    if (inactivityTimer) clearTimeout(inactivityTimer);
 
                     if (watchId !== null) {
                         navigator.geolocation.clearWatch(watchId);
                         watchId = null;
                     }
-                    
+
                     let finalSteps = motionMode ? stepCount : Math.floor(totalDistance / STEP_LENGTH_METERS);
                     saveStatsToSupabase(finalSteps, totalDistance);
-                    
+
                     stepCount = 0;
+                    window.removeEventListener('devicemotion', handleMotion);
+                    motionMode = false;
 
                     if (dueToInactivity) {
-                        try { tg.showAlert("10 daqiqa harakatsiz bo'lganligi sababli o'yin avtomatik to'xtatildi."); } catch(e){}
+                        try { tg.showAlert("10 daqiqa harakatsiz bo'lganligi sababli o'yin avtomatik to'xtatildi."); } catch (e) { }
                     } else {
                         if (tg.HapticFeedback && typeof tg.HapticFeedback.notificationOccurred === 'function') {
-                            try { tg.HapticFeedback.notificationOccurred('success'); } catch(e){}
+                            try { tg.HapticFeedback.notificationOccurred('success'); } catch (e) { }
                         }
-                        
+
                         try {
                             tg.showPopup({
                                 title: "O'yin to'xtatildi",
                                 message: `Siz ${finalSteps} qadam yurdingiz.\nMasofa: ${totalDistance < 1000 ? totalDistance.toFixed(1) + ' m' : (totalDistance / 1000).toFixed(2) + ' km'}\nMaydon: ${totalArea.toFixed(1)} m²`,
-                                buttons: [{type: "close"}]
+                                buttons: [{ type: "close" }]
                             });
-                        } catch(e) {
+                        } catch (e) {
                             alert(`O'yin to'xtatildi!\nQadam: ${finalSteps}\nMasofa: ${totalDistance < 1000 ? totalDistance.toFixed(1) + ' m' : (totalDistance / 1000).toFixed(2) + ' km'}`);
                         }
                     }
@@ -440,7 +501,7 @@
                     pathLatLngs = [];
                 } catch (err) {
                     console.error("To'xtatish xatoligi:", err);
-                    try { tg.showAlert("To'xtatishda xato: " + err.message); } catch(ex){}
+                    try { tg.showAlert("To'xtatishda xato: " + err.message); } catch (ex) { }
                 }
             }
 
@@ -448,10 +509,10 @@
                 if ("geolocation" in navigator) {
                     navigator.geolocation.getCurrentPosition((pos) => {
                         map.setView([pos.coords.latitude, pos.coords.longitude], 16);
-                        currentPositionMarker = L.marker([pos.coords.latitude, pos.coords.longitude], {icon: userIcon, zIndexOffset: 1000}).addTo(map);
-                    }, () => {}, { enableHighAccuracy: true });
+                        currentPositionMarker = L.marker([pos.coords.latitude, pos.coords.longitude], { icon: userIcon, zIndexOffset: 1000 }).addTo(map);
+                    }, () => { }, { enableHighAccuracy: true });
                 }
-            } catch (ignoreErr) {}
+            } catch (ignoreErr) { }
 
             stopBtn.addEventListener('click', () => stopTracking(false));
 
@@ -460,7 +521,7 @@
                     tg.showAlert("Qurilmangizda GPS yo'q.");
                     return;
                 }
-                
+
                 if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
                     try {
                         const permission = await DeviceMotionEvent.requestPermission();
@@ -472,7 +533,7 @@
                             motionMode = false;
                             showStatus("🛰 GPS orqali ishlamoqda", 3000);
                         }
-                    } catch(e) {
+                    } catch (e) {
                         motionMode = false;
                     }
                 } else if (typeof DeviceMotionEvent !== 'undefined') {
@@ -487,12 +548,12 @@
                 isTracking = true;
                 startBtn.style.display = 'none';
                 stopBtn.style.display = 'flex';
-                
-                if(!motionMode) showStatus("GPS Qadam hisoblamoqda...");
+
+                if (!motionMode) showStatus("GPS Qadam hisoblamoqda...");
 
                 if (polyline) map.removeLayer(polyline);
-                pathLatLngs = []; 
-                totalDistance = 0; 
+                pathLatLngs = [];
+                totalDistance = 0;
                 lastTimestamp = null;
                 updateStats();
                 resetInactivityTimer();
@@ -506,24 +567,25 @@
                     const lng = position.coords.longitude;
                     const accuracy = position.coords.accuracy;
                     const timestamp = position.timestamp;
-                    
-                    resetInactivityTimer(); 
 
-                    // Jiddiy GPS noaniqligi. Uy ichida signal zaiflashishi mumkin
-                    if (accuracy > 60) {
-                        showStatus(`📍 GPS noaniq (${Math.floor(accuracy)}m). Ochiq havoga chiqing!`, 3000);
-                        return; 
+                    resetInactivityTimer();
+
+                    const accuracyLimit = motionMode ? 20 : 60;
+                    if (accuracy > accuracyLimit) {
+                        if (motionMode) showStatus(`📍 GPS: ${Math.floor(accuracy)}m noaniq`, 2000);
+                        else showStatus(`📍 GPS noaniq (${Math.floor(accuracy)}m). Ochiq havoga chiqing!`, 3000);
+                        return;
                     }
-                    
+
                     const newPoint = L.latLng(lat, lng);
-                    
+
                     if (pathLatLngs.length > 0) {
                         const lastPoint = pathLatLngs[pathLatLngs.length - 1];
                         const dist = lastPoint.distanceTo(newPoint);
-                        
+
                         // Kichik GPS titrashlari inkor etiladi! Bu tezlik yoki masofaga mutlaqo kirmaydi.
                         if (dist < MIN_DISTANCE_ACCURACY) return;
-                        
+
                         // Faqat haqiqiy uzoq masofa bilan vaqt farqini o'lchaymiz!
                         if (lastTimestamp) {
                             const timeDiffSec = (timestamp - lastTimestamp) / 1000;
@@ -533,7 +595,7 @@
                                 if (speed > SPEED_LIMIT_MPS) {
                                     showStatus("🚫 Moshinaga o'xshaysiz! (Anti-Cheat)", 2000);
                                     // Izoh: Soxta Tez kelgan nuqtaning vaqtini eslab qolmaymiz! Bu bilan Deadlock dan himoya qilamiz.
-                                    return; 
+                                    return;
                                 }
                             } else if (timeDiffSec > 0) {
                                 // 0.5 sekundan tez qayta-qayta kelib 2 metrdan ko'p sakrasa, bu baribir glitch sakrash
@@ -546,7 +608,7 @@
                         pathLatLngs.push(newPoint);
                         polyline.addLatLng(newPoint);
                         lastTimestamp = timestamp;
-                        
+
                         if (pathLatLngs.length > 10) {
                             const distanceToStart = newPoint.distanceTo(pathLatLngs[0]);
                             if (distanceToStart <= POLYGON_CLOSE_DIST) {
@@ -561,15 +623,15 @@
                     }
 
                     if (!currentPositionMarker) {
-                        currentPositionMarker = L.marker([lat, lng], {icon: userIcon, zIndexOffset: 1000}).addTo(map);
+                        currentPositionMarker = L.marker([lat, lng], { icon: userIcon, zIndexOffset: 1000 }).addTo(map);
                     } else {
                         currentPositionMarker.setLatLng([lat, lng]);
                     }
                     map.panTo([lat, lng]);
-                    
+
                     // Har doim o'zgarishni ekranga yozamiz
                     updateStats();
-                    
+
                 }, (error) => {
                     showStatus("GPS signal kutilmoqda...", 2000);
                     resetInactivityTimer();
@@ -591,4 +653,5 @@
         }); // DOMContentLoaded yopish
     </script>
 </body>
+
 </html>
