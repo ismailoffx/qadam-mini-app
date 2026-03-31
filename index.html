@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Qadam - Telegram Mini App v2.2</title>
+    <title>Qadam - Telegram Mini App v2.3</title>
     
     <!-- Brauzer eski keshni ishlatmasligi uchun -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
@@ -123,7 +123,7 @@
     </style>
 </head>
 <body>
-    <div style="position: absolute; top: 10px; right: 15px; z-index: 9999; font-size: 14px; font-weight: 800; color: #ff3b30; text-shadow: 0px 0px 3px white;">v2.2</div>
+    <div style="position: absolute; top: 10px; right: 15px; z-index: 9999; font-size: 14px; font-weight: 800; color: #ff3b30; text-shadow: 0px 0px 3px white;">v2.3</div>
 
     <div class="hud">
         <div class="hud-value" id="stepCount">0</div>
@@ -194,10 +194,10 @@
             const INACTIVITY_LIMIT_MS = 10 * 60 * 1000;
             const SPEED_LIMIT_MPS = 4.0; // (14km/h gacha)
             const POLYGON_CLOSE_DIST = 15;
-            // Keng qadam - 0.8 / 1 qadam qilib olamiz (Kutish vaqtini kamaytirish uchun)
-            const STEP_LENGTH_METERS = 0.8; 
-            // 2 metrli masofa - Dastur tezroq o'ylashi uchun GPS xatosi pasaytirildi
-            const MIN_DISTANCE_ACCURACY = 2; // (2 metrdan keyingina qadam ko'payadi, xonada sekin ishlashi mumkin)
+            // Keng qadam o'rniga chaqqonroq (0.6 metrdan 1 qadam) deb olamiz
+            const STEP_LENGTH_METERS = 0.6; 
+            // 0.5 metrlik eng sezgir GPS masofa qo'yildi - bu uydagi eng kichik yurishlarni ham sanaydi (Garchi ba'zida joyida ozgina qaltirab tursa ham qadam sanaydi lekin juda sezgir!)
+            const MIN_DISTANCE_ACCURACY = 0.5;
 
             const userIcon = L.divIcon({
                 className: 'custom-user-marker',
