@@ -337,15 +337,30 @@
         .leaflet-container {
             background: #111 !important;
         }
+        /* Focus Button */
+        #focusBtn:active {
+            transform: scale(0.9);
+        }
     </style>
 </head>
 
 <body>
     <!-- VERSION INDICATOR -->
-    <div style="position: absolute; top: 10px; right: 15px; z-index: 9999; font-size: 10px; color: var(--text-secondary); opacity: 0.5; font-weight: bold;">v3.1 Beta</div>
+    <div style="position: absolute; top: 10px; right: 15px; z-index: 9999; font-size: 10px; color: var(--text-secondary); opacity: 0.5; font-weight: bold;">v3.3 Precision</div>
+
+    <!-- GPS SIGNAL INDICATOR -->
+    <div id="gpsSignal" style="position: absolute; top: 10px; left: 15px; z-index: 9999; font-size: 11px; font-weight: bold; display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.5); padding: 4px 10px; border-radius: 12px; backdrop-filter: var(--glass-blur); border: 1px solid rgba(255,255,255,0.1);">
+        <div id="gpsDot" style="width: 8px; height: 8px; border-radius: 50%; background-color: gray; box-shadow: 0 0 5px gray;"></div>
+        <span id="gpsText" style="color: var(--text-primary);">GPS Kutilmoqda</span>
+    </div>
 
     <!-- MAP VIEW -->
     <div id="map"></div>
+
+    <!-- FOCUS BUTTON -->
+    <button id="focusBtn" style="position: absolute; top: 110px; right: 20px; z-index: 1000; background: var(--surface-color); border: 1px solid rgba(255,255,255,0.1); border-radius: 50%; width: 45px; height: 45px; backdrop-filter: blur(10px); color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.2s;">
+        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><circle cx="12" cy="12" r="3"></circle></svg>
+    </button>
 
     <!-- HUD -->
     <div class="hud" id="hud">
@@ -381,8 +396,8 @@
                 <div class="stat-card-value" id="statsToday">0</div>
             </div>
             <div class="stat-card">
-                <div class="stat-card-title">Liga (Tez Kunda)</div>
-                <div class="stat-card-value" id="statsWeekly" style="font-size: 16px; color: var(--accent-color);">Imperator</div>
+                <div class="stat-card-title">Liga</div>
+                <div class="stat-card-value" id="ligaDisplay" style="font-size: 16px; color: var(--accent-color);">Izlovchi</div>
             </div>
             <div class="stat-card" style="grid-column: span 2; background: linear-gradient(135deg, rgba(0, 210, 255, 0.1), rgba(58, 123, 213, 0.1)); border-color: rgba(0, 210, 255, 0.2);">
                 <div class="stat-card-title">Umumiy Bosib Olingan Maydon</div>
@@ -471,8 +486,10 @@
             let inactivityTimer = null;
 
             let stepCount = 0;
-            let lastMagnitude = 0;
             let lastStepTime = 0;
+            let accHistory = [];
+            const ACC_HISTORY_SIZE = 12;
+            const STEP_THRESHOLD = 2.0;
             let motionMode = false;
 
             const INACTIVITY_LIMIT_MS = 10 * 60 * 1000;
@@ -486,6 +503,14 @@
                 if (userId === tgUser.id) return '#00d2ff';
                 const hue = (userId % 360);
                 return `hsl(${hue}, 70%, 60%)`;
+            }
+
+            function getLeague(area) {
+                if (area < 500) return "🚶 Kichik Qadam";
+                if (area < 2000) return "🏃 Sayyoh";
+                if (area < 10000) return "🛡 Jengchi";
+                if (area < 50000) return "⚔️ Sarkarda";
+                return "👑 Imperator";
             }
 
             const userIcon = L.divIcon({
@@ -558,6 +583,7 @@
                     
                     const totalAreaSqm = (areaData || []).reduce((acc, row) => acc + (row.area_sqm || 0), 0);
                     document.getElementById('statsTotalArea').textContent = totalAreaSqm > 10000 ? (totalAreaSqm/10000).toFixed(2) + ' ha' : totalAreaSqm.toFixed(1) + ' m²';
+                    document.getElementById('ligaDisplay').textContent = getLeague(totalAreaSqm);
                 } catch (e) { console.error(e); }
             }
 
@@ -589,7 +615,8 @@
                     fillColor: color,
                     fillOpacity: isMine ? 0.3 : 0.2,
                     weight: 3,
-                    dashArray: isMine ? '' : '5, 10'
+                    dashArray: isMine ? '' : '5, 10',
+                    isMine: isMine
                 }).addTo(map);
                 polygons.push(poly);
             }
@@ -679,11 +706,15 @@
                 if (!acc || acc.x === null) return;
                 
                 const magnitude = Math.sqrt(acc.x**2 + acc.y**2 + acc.z**2);
-                const delta = Math.abs(magnitude - lastMagnitude);
-                lastMagnitude = magnitude;
+                
+                accHistory.push(magnitude);
+                if (accHistory.length > ACC_HISTORY_SIZE) accHistory.shift();
+                
+                const avgMagnitude = accHistory.reduce((a, b) => a + b, 0) / accHistory.length;
+                const delta = Math.abs(magnitude - avgMagnitude);
                 const now = Date.now();
                 
-                if (delta > 2.0 && (now - lastStepTime) > 350) {
+                if (delta > STEP_THRESHOLD && (now - lastStepTime) > 350) {
                     stepCount++;
                     lastStepTime = now;
                     updateStats();
@@ -727,6 +758,19 @@
                 distanceEl.textContent = totalDistance < 1000 ? totalDistance.toFixed(1) + ' m' : (totalDistance / 1000).toFixed(2) + ' km';
                 areaEl.textContent = totalArea > 10000 ? (totalArea / 10000).toFixed(2) + ' ha' : totalArea.toFixed(1) + ' m²';
             }
+
+            // Focus button logic
+            document.getElementById('focusBtn').addEventListener('click', () => {
+                let myPolygons = polygons.filter(p => p.options.isMine);
+                if (myPolygons.length > 0) {
+                    let group = new L.featureGroup(myPolygons);
+                    map.fitBounds(group.getBounds(), { padding: [30, 30], maxZoom: 18 });
+                } else if (currentPositionMarker) {
+                    map.panTo(currentPositionMarker.getLatLng(), {animate: true});
+                } else {
+                    tg.showAlert("Xarita hududini topish imkonsiz!");
+                }
+            });
 
             // Navigation Logic
             navItems.forEach(item => {
@@ -798,7 +842,7 @@
                             <div class="rank-item ${rankClass} ${isMeClass}">
                                 <div class="rank-pos">${index + 1}</div>
                                 <div class="rank-info">
-                                    <div class="rank-name">${u.name} ${u.id === tgUser.id ? ' (Siz)' : ''}</div>
+                                    <div class="rank-name">${u.name} ${u.id === tgUser.id ? ' (Siz)' : ''} <span style="font-size: 10px; color: #888; margin-left: 5px;">${getLeague(u.area)}</span></div>
                                     <div class="rank-score">${displayArea} yer!</div>
                                 </div>
                             </div>
@@ -843,20 +887,50 @@
                     const accuracy = position.coords.accuracy;
                     const timestamp = position.timestamp;
 
+                    // Update GPS Indicator
+                    const gpsDot = document.getElementById('gpsDot');
+                    const gpsText = document.getElementById('gpsText');
+                    
+                    if (accuracy <= 10) {
+                        gpsDot.style.backgroundColor = '#00FF00'; gpsDot.style.boxShadow = '0 0 8px #00FF00';
+                        gpsText.textContent = `A'lo (${Math.floor(accuracy)}m)`;
+                    } else if (accuracy <= 25) {
+                        gpsDot.style.backgroundColor = '#FFD700'; gpsDot.style.boxShadow = '0 0 8px #FFD700';
+                        gpsText.textContent = `O'rtacha (${Math.floor(accuracy)}m)`;
+                    } else {
+                        gpsDot.style.backgroundColor = '#FF4500'; gpsDot.style.boxShadow = '0 0 8px #FF4500';
+                        gpsText.textContent = `Zaif ${Math.floor(accuracy)}m`;
+                    }
+
                     resetInactivityTimer();
-                    if (accuracy > (motionMode ? 30 : 60)) return;
+                    
+                    // ANTI-DRIFT 0: Katta adashishda hech narsani qabul qilmaymiz
+                    if (accuracy > (motionMode ? 35 : 60)) return;
 
                     const newPoint = L.latLng(lat, lng);
                     if (pathLatLngs.length > 0) {
                         const lastPoint = pathLatLngs[pathLatLngs.length - 1];
                         const dist = lastPoint.distanceTo(newPoint);
-                        if (dist < MIN_DISTANCE_ACCURACY) return;
+                        
+                        // ANTI-DRIFT 1: Kichik adashishlarni (GPS sakrashini) e'tiborga olmaslik
+                        let dynamicAccuracyFilter = Math.max(2.5, accuracy * 0.4);
+                        if (dist < dynamicAccuracyFilter) return; 
 
                         if (lastTimestamp) {
                             const timeDiffSec = (timestamp - lastTimestamp) / 1000;
-                            if (timeDiffSec > 0.5 && (dist / timeDiffSec) > SPEED_LIMIT_MPS) {
-                                showStatus("🚫 Juda tez! (Anti-Cheat)", 2000);
-                                return;
+                            
+                            // ANTI-DRIFT 2: Tezlik va sakrashni tekshirish
+                            if (timeDiffSec > 0) {
+                                const speed = dist / timeDiffSec;
+                                if (speed > SPEED_LIMIT_MPS) {
+                                    showStatus("🚫 Tezlik yuqori!", 2000);
+                                    return; // Ghost jump (binoda GPS sakrashi)
+                                }
+                                
+                                // O'ta sekin harakatlanish - bu oddiygina Drift bo'lishi mumkin! Uni masofaga kiritmaymiz.
+                                if (speed < 0.2) {
+                                    return; 
+                                }
                             }
                         }
 
@@ -874,6 +948,7 @@
                         lastTimestamp = timestamp;
                     }
 
+                    // Tizim aniq qadamni qo'shganida marker siljishi
                     if (!currentPositionMarker) {
                         currentPositionMarker = L.marker([lat, lng], { icon: userIcon }).addTo(map);
                     } else {
