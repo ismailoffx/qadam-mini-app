@@ -346,7 +346,7 @@
 
 <body>
     <!-- VERSION INDICATOR -->
-    <div style="position: absolute; top: 10px; right: 15px; z-index: 9999; font-size: 10px; color: var(--text-secondary); opacity: 0.5; font-weight: bold;">v3.3 Precision</div>
+    <div style="position: absolute; top: 10px; right: 15px; z-index: 9999; font-size: 10px; color: var(--text-secondary); opacity: 0.5; font-weight: bold;">v3.4 Activity Timer</div>
 
     <!-- GPS SIGNAL INDICATOR -->
     <div id="gpsSignal" style="position: absolute; top: 10px; left: 15px; z-index: 9999; font-size: 11px; font-weight: bold; display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.5); padding: 4px 10px; border-radius: 12px; backdrop-filter: var(--glass-blur); border: 1px solid rgba(255,255,255,0.1);">
@@ -365,8 +365,9 @@
     <!-- HUD -->
     <div class="hud" id="hud">
         <div class="hud-main">
-            <div class="hud-value" id="stepCount">0</div>
+            <div class="hud-value" id="hudSteps">0</div>
             <div class="hud-label">Qadam</div>
+            <div style="font-size: 14px; color: var(--accent-color); font-weight: 800; margin-top: 5px; text-shadow: 0 0 10px rgba(0,210,255,0.4);" id="hudTimer">00:00:00</div>
         </div>
         <div class="hud-details">
             <div class="hud-detail-item"><span class="hud-detail-label">Masofa:</span><span id="distanceDisplay">0.0 m</span></div>
@@ -447,12 +448,10 @@
             tg.ready();
 
             const tgUser = tg.initDataUnsafe?.user || { id: 111111, first_name: "Mehmon", username: "mehmon" };
-            // Force dark theme for premium feel as per CSS
             document.body.setAttribute('data-theme', 'dark');
 
             const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([41.311081, 69.240562], 13);
             
-            // Dark Map Style (using CartoDB Dark Matter)
             L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
                 attribution: '&copy; CartoDB',
                 subdomains: 'abcd',
@@ -461,13 +460,12 @@
 
             const startBtn = document.getElementById('startBtn');
             const stopBtn = document.getElementById('stopBtn');
-            const stepCountEl = document.getElementById('stepCount');
+            const stepCountEl = document.getElementById('hudSteps');
             const distanceEl = document.getElementById('distanceDisplay');
             const areaEl = document.getElementById('areaDisplay');
             const statusPill = document.getElementById('statusPill');
             const hud = document.getElementById('hud');
 
-            // Tabs
             const navItems = document.querySelectorAll('.nav-item');
             const viewStats = document.getElementById('viewStats');
             const viewRank = document.getElementById('viewRank');
@@ -484,21 +482,24 @@
 
             let lastTimestamp = null;
             let inactivityTimer = null;
+            
+            let trackingStartTime = null;
+            let trackingTimerInterval = null;
 
             let stepCount = 0;
-            let lastStepTime = 0;
             let accHistory = [];
             const ACC_HISTORY_SIZE = 12;
-            const STEP_THRESHOLD = 2.0;
+            const STEP_THRESHOLD = 3.2; 
+            let potentialSteps = 0;
+            let lastPotentialStepTime = 0;
+            
             let motionMode = false;
 
             const INACTIVITY_LIMIT_MS = 10 * 60 * 1000;
             const SPEED_LIMIT_MPS = 4.0; 
             const POLYGON_CLOSE_DIST = 15;
             const STEP_LENGTH_METERS = 0.6;
-            const MIN_DISTANCE_ACCURACY = 0.5;
 
-            // Generate user color based on ID
             function getUserColor(userId) {
                 if (userId === tgUser.id) return '#00d2ff';
                 const hue = (userId % 360);
@@ -530,7 +531,6 @@
                 setTimeout(() => statusPill.classList.remove('visible'), timeout);
             }
 
-            // SUPABASE
             let supabase = null;
             try {
                 if (window.supabase) {
@@ -558,8 +558,6 @@
                             drawTerritoryPolygon(newTerritory.polygon_coords, newTerritory.user_id);
                         }
                     }).subscribe();
-
-                    showStatus("Tizim tayyor!", 2000);
                 } catch (e) { console.error(e); }
             }
 
@@ -647,40 +645,6 @@
                 totalArea += area;
                 const jsonCoords = pathLatLngs.map(p => ({ lat: p.lat, lng: p.lng }));
 
-                // Anti-Theft qismi (Turf.js orqali kesishishni tekshirish)
-                try {
-                    if (pathLatLngs.length >= 3) {
-                        let myCoords = pathLatLngs.map(p => [p.lng, p.lat]);
-                        myCoords.push([pathLatLngs[0].lng, pathLatLngs[0].lat]); // Yopish
-                        const myGeoJSON = turf.polygon([myCoords]);
-                        
-                        let notifiedUsers = new Set();
-                        for (const terr of allTerritoriesData) {
-                            if (terr.user_id === tgUser.id) continue;
-                            if (!terr.polygon_coords || terr.polygon_coords.length < 3) continue;
-                            
-                            let terrCoords = terr.polygon_coords.map(c => [c.lng, c.lat]);
-                            terrCoords.push([terr.polygon_coords[0].lng, terr.polygon_coords[0].lat]);
-                            
-                            const terrGeoJSON = turf.polygon([terrCoords]);
-                            if (turf.booleanIntersects(myGeoJSON, terrGeoJSON)) {
-                                if (!notifiedUsers.has(terr.user_id)) {
-                                    notifiedUsers.add(terr.user_id);
-                                    let botToken = "8632103248:AAHoZwFwK3jx89-CTvYYwARbUWqIFmf_zvM";
-                                    let msg = `⚠️ <b>Hududiy Ogohlantirish!</b>\n\nSizning hududingizga <b>${tgUser.first_name || 'kiboy'}</b> bostirib kirdi va yerlaringizni tortib olmoqda! Ilovaga kirib o'z hududingizni qaytarib oling!`;
-                                    fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-                                        method: 'POST',
-                                        headers: {'Content-Type': 'application/json'},
-                                        body: JSON.stringify({ chat_id: terr.user_id, text: msg, parse_mode: 'HTML' })
-                                    }).catch(e => console.log(e));
-                                }
-                            }
-                        }
-                    }
-                } catch (err) {
-                    console.error("Kesishuvni tekshirishda xatolik:", err);
-                }
-
                 drawTerritoryPolygon(jsonCoords, tgUser.id);
                 if (supabase) {
                     await supabase.from('territories').insert({
@@ -706,7 +670,6 @@
                 if (!acc || acc.x === null) return;
                 
                 const magnitude = Math.sqrt(acc.x**2 + acc.y**2 + acc.z**2);
-                
                 accHistory.push(magnitude);
                 if (accHistory.length > ACC_HISTORY_SIZE) accHistory.shift();
                 
@@ -714,52 +677,64 @@
                 const delta = Math.abs(magnitude - avgMagnitude);
                 const now = Date.now();
                 
-                if (delta > STEP_THRESHOLD && (now - lastStepTime) > 350) {
-                    stepCount++;
-                    lastStepTime = now;
-                    updateStats();
-                    resetInactivityTimer();
+                if (delta > STEP_THRESHOLD && (now - lastPotentialStepTime) > 300) {
+                    if (now - lastPotentialStepTime < 1500) {
+                        potentialSteps++;
+                    } else {
+                        potentialSteps = 1;
+                    }
+                    lastPotentialStepTime = now;
+
+                    if (potentialSteps >= 4) {
+                        if (potentialSteps === 4) stepCount += 4;
+                        else stepCount++;
+                        updateStats();
+                        resetInactivityTimer();
+                    }
                 }
             }
 
             function stopTracking(dueToInactivity = false) {
                 isTracking = false;
+                if (watchId) navigator.geolocation.clearWatch(watchId);
+                window.removeEventListener('devicemotion', handleMotion);
+                if (inactivityTimer) clearTimeout(inactivityTimer);
+                if (trackingTimerInterval) clearInterval(trackingTimerInterval);
+
                 startBtn.style.display = 'flex';
                 stopBtn.style.display = 'none';
-                hud.style.transform = 'translateY(0)';
 
-                if (inactivityTimer) clearTimeout(inactivityTimer);
-                if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
-
-                let finalSteps = motionMode ? stepCount : Math.floor(totalDistance / STEP_LENGTH_METERS);
-                if (supabase && finalSteps > 0) {
+                if (supabase && stepCount > 0) {
                     supabase.from('steps_stats').insert({
                         user_id: tgUser.id,
-                        steps: finalSteps,
+                        steps: stepCount,
                         distance_meters: totalDistance,
                         date: new Date().toISOString()
                     }).then(() => loadUserStats());
                 }
-
-                stepCount = 0;
-                window.removeEventListener('devicemotion', handleMotion);
-                motionMode = false;
 
                 if (dueToInactivity) tg.showAlert("10 daqiqa harakatsiz bo'lganligi sababli o'yin to'xtatildi.");
                 else tg.HapticFeedback.notificationOccurred('success');
 
                 if (polyline) map.removeLayer(polyline);
                 pathLatLngs = [];
+                stepCount = 0;
             }
 
             function updateStats() {
-                let steps = motionMode ? stepCount : Math.floor(totalDistance / STEP_LENGTH_METERS);
-                stepCountEl.textContent = steps.toLocaleString();
+                stepCountEl.textContent = stepCount.toLocaleString();
                 distanceEl.textContent = totalDistance < 1000 ? totalDistance.toFixed(1) + ' m' : (totalDistance / 1000).toFixed(2) + ' km';
                 areaEl.textContent = totalArea > 10000 ? (totalArea / 10000).toFixed(2) + ' ha' : totalArea.toFixed(1) + ' m²';
             }
 
-            // Focus button logic
+            function formatTime(ms) {
+                const totalSec = Math.floor(ms / 1000);
+                const h = Math.floor(totalSec / 3600);
+                const m = Math.floor((totalSec % 3600) / 60);
+                const s = totalSec % 60;
+                return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+            }
+
             document.getElementById('focusBtn').addEventListener('click', () => {
                 let myPolygons = polygons.filter(p => p.options.isMine);
                 if (myPolygons.length > 0) {
@@ -767,30 +742,17 @@
                     map.fitBounds(group.getBounds(), { padding: [30, 30], maxZoom: 18 });
                 } else if (currentPositionMarker) {
                     map.panTo(currentPositionMarker.getLatLng(), {animate: true});
-                } else {
-                    tg.showAlert("Xarita hududini topish imkonsiz!");
                 }
             });
 
-            // Navigation Logic
             navItems.forEach(item => {
                 item.addEventListener('click', () => {
                     navItems.forEach(i => i.classList.remove('active'));
                     item.classList.add('active');
                     const view = item.getAttribute('data-view');
-                    
-                    if (view === 'stats') {
-                        viewStats.classList.add('active');
-                        viewRank.classList.remove('active');
-                        loadUserStats();
-                    } else if (view === 'rank') {
-                        viewRank.classList.add('active');
-                        viewStats.classList.remove('active');
-                        loadLeaderboard();
-                    } else {
-                        viewStats.classList.remove('active');
-                        viewRank.classList.remove('active');
-                    }
+                    viewStats.classList.toggle('active', view === 'stats');
+                    viewRank.classList.toggle('active', view === 'rank');
+                    if (view === 'rank') loadLeaderboard();
                 });
             });
 
@@ -801,57 +763,26 @@
                 try {
                     const { data: territories } = await supabase.from('territories').select('user_id, area_sqm');
                     const { data: users } = await supabase.from('users').select('*');
-                    
                     let userAreas = {};
-                    if(territories) {
-                        territories.forEach(t => {
-                            if(!userAreas[t.user_id]) userAreas[t.user_id] = 0;
-                            userAreas[t.user_id] += (t.area_sqm || 0);
-                        });
-                    }
-                    
-                    let leaderboard = [];
-                    if(users) {
-                        users.forEach(u => {
-                            let totalA = userAreas[u.telegram_id] || 0;
-                            if (totalA > 0) { // Faqat maydoni borlar reytinga tushadi
-                                leaderboard.push({
-                                    id: u.telegram_id,
-                                    name: u.first_name || u.username || 'Nomsiz Obunachi',
-                                    area: totalA
-                                });
-                            }
-                        });
-                    }
-                    
-                    // Katta maydondan kichik maydonga qarab saralash
-                    leaderboard.sort((a, b) => b.area - a.area);
+                    territories?.forEach(t => { userAreas[t.user_id] = (userAreas[t.user_id] || 0) + (t.area_sqm || 0); });
+                    let leaderboard = users?.filter(u => userAreas[u.telegram_id] > 0).map(u => ({
+                        id: u.telegram_id, name: u.first_name || 'Nomsiz', area: userAreas[u.telegram_id]
+                    })).sort((a, b) => b.area - a.area);
                     
                     rankContainer.innerHTML = '';
-                    if (leaderboard.length === 0) {
-                        rankContainer.innerHTML = '<div style="text-align:center; padding: 20px; color: var(--text-secondary);">Hali hech qanday hudud egallanmadi</div>';
-                        return;
-                    }
-
-                    leaderboard.slice(0, 15).forEach((u, index) => {
+                    leaderboard?.slice(0, 15).forEach((u, index) => {
                         let rankClass = index === 0 ? 'rank-top-1' : (index === 1 ? 'rank-top-2' : (index === 2 ? 'rank-top-3' : ''));
-                        let isMeClass = u.id === tgUser.id ? 'is-me' : '';
-                        let displayArea = u.area > 10000 ? (u.area/10000).toFixed(2) + ' ga' : u.area.toFixed(1) + ' m²';
-                        
                         rankContainer.innerHTML += `
-                            <div class="rank-item ${rankClass} ${isMeClass}">
+                            <div class="rank-item ${rankClass} ${u.id === tgUser.id ? 'is-me' : ''}">
                                 <div class="rank-pos">${index + 1}</div>
                                 <div class="rank-info">
-                                    <div class="rank-name">${u.name} ${u.id === tgUser.id ? ' (Siz)' : ''} <span style="font-size: 10px; color: #888; margin-left: 5px;">${getLeague(u.area)}</span></div>
-                                    <div class="rank-score">${displayArea} yer!</div>
+                                    <div class="rank-name">${u.name}</div>
+                                    <div class="rank-score">${u.area > 10000 ? (u.area/10000).toFixed(2) + ' ha' : u.area.toFixed(1) + ' m²'}</div>
                                 </div>
                             </div>
                         `;
                     });
-                } catch (e) {
-                    rankContainer.innerHTML = '<div style="text-align:center; padding: 20px; color: var(--danger-color);">Xato yuz berdi. Internetni tekshiring.</div>';
-                    console.error(e);
-                }
+                } catch (e) { console.error(e); }
             }
 
             startBtn.addEventListener('click', async () => {
@@ -859,17 +790,27 @@
                 
                 if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
                     try {
-                        const permission = await DeviceMotionEvent.requestPermission();
-                        motionMode = (permission === 'granted');
-                    } catch (e) { motionMode = false; }
-                } else { motionMode = (typeof DeviceMotionEvent !== 'undefined'); }
-
-                if (motionMode) window.addEventListener('devicemotion', handleMotion);
+                        const state = await DeviceMotionEvent.requestPermission();
+                        if (state === 'granted') { window.addEventListener('devicemotion', handleMotion); motionMode = true; }
+                    } catch (e) { console.error(e); }
+                } else { window.addEventListener('devicemotion', handleMotion); motionMode = true; }
 
                 isTracking = true;
+                stepCount = 0;
+                potentialSteps = 0;
                 startBtn.style.display = 'none';
                 stopBtn.style.display = 'flex';
-                hud.style.transform = 'translateY(10px)';
+                document.getElementById('gpsSignal').style.display = 'flex';
+                document.getElementById('hud').classList.add('active');
+                
+                // Timer
+                trackingStartTime = Date.now();
+                document.getElementById('hudTimer').textContent = "00:00:00";
+                trackingTimerInterval = setInterval(() => {
+                    const elapsed = Date.now() - trackingStartTime;
+                    document.getElementById('hudTimer').textContent = formatTime(elapsed);
+                }, 1000);
+
                 showStatus(motionMode ? "📱 Sensor faol" : "🛰 GPS faol", 2000);
 
                 if (polyline) map.removeLayer(polyline);
