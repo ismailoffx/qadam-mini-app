@@ -230,6 +230,58 @@
             transform: scale(0.9);
         }
 
+        /* Leaderboard */
+        .rank-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .rank-item {
+            background: var(--surface-color);
+            border-radius: 16px;
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: transform 0.2s;
+        }
+
+        .rank-item:active {
+            transform: scale(0.98);
+        }
+
+        .rank-pos {
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--text-secondary);
+            width: 40px;
+            text-align: center;
+        }
+
+        .rank-info {
+            flex-grow: 1;
+            margin-left: 10px;
+        }
+
+        .rank-name {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+        }
+
+        .rank-score {
+            font-size: 13px;
+            color: var(--accent-color);
+            font-weight: 600;
+        }
+
+        .rank-top-1 .rank-pos { color: #FFD700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
+        .rank-top-2 .rank-pos { color: #C0C0C0; }
+        .rank-top-3 .rank-pos { color: #CD7F32; }
+        .is-me { border-color: rgba(0, 210, 255, 0.4); background: rgba(0, 210, 255, 0.1); }
+
         /* Stats Cards */
         .stats-grid {
             display: grid;
@@ -290,7 +342,7 @@
 
 <body>
     <!-- VERSION INDICATOR -->
-    <div style="position: absolute; top: 10px; right: 15px; z-index: 9999; font-size: 10px; color: var(--text-secondary); opacity: 0.5;">v3.0 Premium</div>
+    <div style="position: absolute; top: 10px; right: 15px; z-index: 9999; font-size: 10px; color: var(--text-secondary); opacity: 0.5; font-weight: bold;">v3.1 Beta</div>
 
     <!-- MAP VIEW -->
     <div id="map"></div>
@@ -322,22 +374,29 @@
 
     <!-- STATS VIEW -->
     <div class="view-container" id="viewStats">
-        <h2 style="margin-bottom: 20px; font-weight: 800; font-size: 28px;">Statistika</h2>
+        <h2 style="margin-bottom: 20px; font-weight: 800; font-size: 28px;">Kichik Hisobot</h2>
         <div class="stats-grid">
             <div class="stat-card">
-                <div class="stat-card-title">Bugun</div>
+                <div class="stat-card-title">Bugungi Qadam</div>
                 <div class="stat-card-value" id="statsToday">0</div>
             </div>
             <div class="stat-card">
-                <div class="stat-card-title">Haftalik</div>
-                <div class="stat-card-value" id="statsWeekly">0</div>
+                <div class="stat-card-title">Liga (Tez Kunda)</div>
+                <div class="stat-card-value" id="statsWeekly" style="font-size: 16px; color: var(--accent-color);">Imperator</div>
             </div>
-            <div class="stat-card" style="grid-column: span 2;">
-                <div class="stat-card-title">Umumiy Maydon</div>
-                <div class="stat-card-value" id="statsTotalArea">0 m²</div>
+            <div class="stat-card" style="grid-column: span 2; background: linear-gradient(135deg, rgba(0, 210, 255, 0.1), rgba(58, 123, 213, 0.1)); border-color: rgba(0, 210, 255, 0.2);">
+                <div class="stat-card-title">Umumiy Bosib Olingan Maydon</div>
+                <div class="stat-card-value" id="statsTotalArea" style="font-size: 28px;">0 m²</div>
             </div>
         </div>
-        <!-- More stats can be added here -->
+    </div>
+
+    <!-- LEADERBOARD VIEW -->
+    <div class="view-container" id="viewRank">
+        <h2 style="margin-bottom: 20px; font-weight: 800; font-size: 28px;">Eng Kuchlilar</h2>
+        <div class="rank-list" id="rankList">
+            <!-- Ranks generated here via JS -->
+        </div>
     </div>
 
     <!-- BOTTOM NAV -->
@@ -396,6 +455,7 @@
             // Tabs
             const navItems = document.querySelectorAll('.nav-item');
             const viewStats = document.getElementById('viewStats');
+            const viewRank = document.getElementById('viewRank');
 
             let isTracking = false;
             let watchId = null;
@@ -677,16 +737,78 @@
                     
                     if (view === 'stats') {
                         viewStats.classList.add('active');
+                        viewRank.classList.remove('active');
                         loadUserStats();
+                    } else if (view === 'rank') {
+                        viewRank.classList.add('active');
+                        viewStats.classList.remove('active');
+                        loadLeaderboard();
                     } else {
                         viewStats.classList.remove('active');
-                    }
-                    
-                    if (view === 'rank') {
-                        showStatus("Reyting tez orada...", 2000);
+                        viewRank.classList.remove('active');
                     }
                 });
             });
+
+            async function loadLeaderboard() {
+                if (!supabase) return;
+                const rankContainer = document.getElementById('rankList');
+                rankContainer.innerHTML = '<div style="text-align:center; padding: 20px; color: var(--text-secondary);">Yuklanmoqda...</div>';
+                try {
+                    const { data: territories } = await supabase.from('territories').select('user_id, area_sqm');
+                    const { data: users } = await supabase.from('users').select('*');
+                    
+                    let userAreas = {};
+                    if(territories) {
+                        territories.forEach(t => {
+                            if(!userAreas[t.user_id]) userAreas[t.user_id] = 0;
+                            userAreas[t.user_id] += (t.area_sqm || 0);
+                        });
+                    }
+                    
+                    let leaderboard = [];
+                    if(users) {
+                        users.forEach(u => {
+                            let totalA = userAreas[u.telegram_id] || 0;
+                            if (totalA > 0) { // Faqat maydoni borlar reytinga tushadi
+                                leaderboard.push({
+                                    id: u.telegram_id,
+                                    name: u.first_name || u.username || 'Nomsiz Obunachi',
+                                    area: totalA
+                                });
+                            }
+                        });
+                    }
+                    
+                    // Katta maydondan kichik maydonga qarab saralash
+                    leaderboard.sort((a, b) => b.area - a.area);
+                    
+                    rankContainer.innerHTML = '';
+                    if (leaderboard.length === 0) {
+                        rankContainer.innerHTML = '<div style="text-align:center; padding: 20px; color: var(--text-secondary);">Hali hech qanday hudud egallanmadi</div>';
+                        return;
+                    }
+
+                    leaderboard.slice(0, 15).forEach((u, index) => {
+                        let rankClass = index === 0 ? 'rank-top-1' : (index === 1 ? 'rank-top-2' : (index === 2 ? 'rank-top-3' : ''));
+                        let isMeClass = u.id === tgUser.id ? 'is-me' : '';
+                        let displayArea = u.area > 10000 ? (u.area/10000).toFixed(2) + ' ga' : u.area.toFixed(1) + ' m²';
+                        
+                        rankContainer.innerHTML += `
+                            <div class="rank-item ${rankClass} ${isMeClass}">
+                                <div class="rank-pos">${index + 1}</div>
+                                <div class="rank-info">
+                                    <div class="rank-name">${u.name} ${u.id === tgUser.id ? ' (Siz)' : ''}</div>
+                                    <div class="rank-score">${displayArea} yer!</div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                } catch (e) {
+                    rankContainer.innerHTML = '<div style="text-align:center; padding: 20px; color: var(--danger-color);">Xato yuz berdi. Internetni tekshiring.</div>';
+                    console.error(e);
+                }
+            }
 
             startBtn.addEventListener('click', async () => {
                 if (!("geolocation" in navigator)) return tg.showAlert("GPS yo'q.");
