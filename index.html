@@ -13,6 +13,7 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4/dist/umd/supabase.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 
@@ -404,6 +405,7 @@
             let polyline = null;
             let currentPositionMarker = null;
             let polygons = [];
+            let allTerritoriesData = [];
 
             let lastTimestamp = null;
             let inactivityTimer = null;
@@ -504,6 +506,7 @@
                 try {
                     const { data } = await supabase.from('territories').select('*');
                     if (data) {
+                        allTerritoriesData = data;
                         let myArea = 0;
                         data.forEach(territory => {
                             drawTerritoryPolygon(territory.polygon_coords, territory.user_id);
@@ -556,6 +559,40 @@
                 const area = getGeodesicArea(pathLatLngs);
                 totalArea += area;
                 const jsonCoords = pathLatLngs.map(p => ({ lat: p.lat, lng: p.lng }));
+
+                // Anti-Theft qismi (Turf.js orqali kesishishni tekshirish)
+                try {
+                    if (pathLatLngs.length >= 3) {
+                        let myCoords = pathLatLngs.map(p => [p.lng, p.lat]);
+                        myCoords.push([pathLatLngs[0].lng, pathLatLngs[0].lat]); // Yopish
+                        const myGeoJSON = turf.polygon([myCoords]);
+                        
+                        let notifiedUsers = new Set();
+                        for (const terr of allTerritoriesData) {
+                            if (terr.user_id === tgUser.id) continue;
+                            if (!terr.polygon_coords || terr.polygon_coords.length < 3) continue;
+                            
+                            let terrCoords = terr.polygon_coords.map(c => [c.lng, c.lat]);
+                            terrCoords.push([terr.polygon_coords[0].lng, terr.polygon_coords[0].lat]);
+                            
+                            const terrGeoJSON = turf.polygon([terrCoords]);
+                            if (turf.booleanIntersects(myGeoJSON, terrGeoJSON)) {
+                                if (!notifiedUsers.has(terr.user_id)) {
+                                    notifiedUsers.add(terr.user_id);
+                                    let botToken = "8632103248:AAHoZwFwK3jx89-CTvYYwARbUWqIFmf_zvM";
+                                    let msg = `⚠️ <b>Hududiy Ogohlantirish!</b>\n\nSizning hududingizga <b>${tgUser.first_name || 'kiboy'}</b> bostirib kirdi va yerlaringizni tortib olmoqda! Ilovaga kirib o'z hududingizni qaytarib oling!`;
+                                    fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                                        method: 'POST',
+                                        headers: {'Content-Type': 'application/json'},
+                                        body: JSON.stringify({ chat_id: terr.user_id, text: msg, parse_mode: 'HTML' })
+                                    }).catch(e => console.log(e));
+                                }
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.error("Kesishuvni tekshirishda xatolik:", err);
+                }
 
                 drawTerritoryPolygon(jsonCoords, tgUser.id);
                 if (supabase) {
